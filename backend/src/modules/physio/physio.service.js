@@ -1,6 +1,6 @@
 import Physiotherapist from "../../models/Physiotherapist.js";
 
-export const getMyPatients = async (userId) => {
+export const getPhysioPatients = async (userId) => {
     const physiotherapist = await Physiotherapist.findOne({
         user: userId,
     }).populate({

@@ -1,11 +1,42 @@
-import PoseTracker from "./components/PoseTracker";
-import "./App.css";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+import { AuthProvider } from "./context/AuthContext";
+
+import Login from "./pages/Login";
+import PatientDashboard from "./pages/PatientDashboard";
+import PhysioDashboard from "./pages/PhysioDashboard";
+
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
     return (
-        <div className="app">
-            <PoseTracker />
-        </div>
+        <AuthProvider>
+            <BrowserRouter>
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+
+                    <Route
+                        path="/patient"
+                        element={
+                            <ProtectedRoute role="PATIENT">
+                                <PatientDashboard />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/physio"
+                        element={
+                            <ProtectedRoute role="PHYSIO">
+                                <PhysioDashboard />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route path="*" element={<Login />} />
+                </Routes>
+            </BrowserRouter>
+        </AuthProvider>
     );
 }
 
