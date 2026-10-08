@@ -192,3 +192,232 @@ body {
   border: 1px solid #ccc;
   margin-top: 20px;
 }
+
+.reference-calibrator {
+  max-width: 1000px;
+  margin: auto;
+  padding: 40px;
+}
+
+.reference-preview {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  margin: 24px 0;
+  border-radius: 12px;
+}
+
+.progress-container {
+  width: 100%;
+  height: 12px;
+  background: #e5e5e5;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 20px 0 10px;
+}
+
+.progress-bar {
+  height: 100%;
+  transition: width 0.15s ease;
+}
+
+.calibration-summary {
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.calibration-summary div {
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+}
+
+.calibration-summary strong,
+.calibration-summary span {
+  display: block;
+}
+
+.calibration-summary span {
+  margin-top: 8px;
+  font-size: 20px;
+}
+
+.rom-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rom-row {
+  display: grid;
+  grid-template-columns:
+    1fr 1fr 1fr;
+  gap: 20px;
+  padding: 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.exercise-details {
+  margin-top: 30px;
+}
+
+.exercise-details label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.exercise-details input,
+.exercise-details textarea {
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.exercise-details textarea {
+  min-height: 100px;
+}
+
+.exercise-session {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.session-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.session-header button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 10px;
+}
+
+.session-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.session-header p {
+  margin-top: 8px;
+  color: #666;
+}
+
+.session-timer {
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: #f4f4f4;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-bottom: 20px;
+  padding: 14px 18px;
+
+  border-radius: 10px;
+  background: #f5f5f5;
+}
+
+.session-target span {
+  color: #666;
+}
+
+.session-target strong {
+  font-size: 20px;
+}
+
+.session-error {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+
+  border-radius: 8px;
+
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.session-loading {
+  padding: 60px;
+  text-align: center;
+}
+
+.session-actions {
+  margin-top: 20px;
+}
+
+.session-live-info {
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.session-live-info>div {
+  padding: 14px;
+
+  border-radius: 10px;
+  background: #f5f5f5;
+}
+
+.session-live-info span {
+  display: block;
+  margin-bottom: 5px;
+
+  font-size: 13px;
+  color: #666;
+}
+
+.session-live-info strong {
+  font-size: 20px;
+}
+
+.finish-session-button {
+  width: 100%;
+  padding: 14px;
+
+  border: none;
+  border-radius: 10px;
+
+  cursor: pointer;
+
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.finish-session-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 700px) {
+  .session-header {
+    flex-direction: column;
+  }
+
+  .session-live-info {
+    grid-template-columns:
+      1fr;
+  }
+}

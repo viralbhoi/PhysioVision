@@ -1,78 +1,154 @@
-import { useNavigate } from "react-router-dom";
-import "./summary.css";
+import "./SessionSummary.css";
 
-const SessionSummary = ({ assignment, result }) => {
-    const navigate = useNavigate();
+function SessionSummary({ session, assignment, onBack }) {
+    const targetReps = assignment?.targetReps ?? session?.targetReps ?? 0;
 
-    const duration = result.duration || 0;
+    const completedReps = session?.completedReps ?? 0;
 
-    const minutes = Math.floor(duration / 60);
+    const averageScore = Math.round(session?.averageScore ?? 0);
 
-    const seconds = duration % 60;
+    const duration = session?.duration ?? 0;
 
-    const scores = result.repScores || [];
+    const repScores = session?.repScores ?? [];
+
+    const completionPercentage =
+        targetReps > 0
+            ? Math.min(100, Math.round((completedReps / targetReps) * 100))
+            : 0;
 
     return (
         <div className="session-summary">
-            <header>
-                <h1>Session Complete</h1>
+            <div className="summary-header">
+                <span className="summary-label">Exercise Complete</span>
 
-                <p>{assignment.exercise.name}</p>
-            </header>
+                <h1>{assignment?.exercise?.name || "Exercise Session"}</h1>
 
-            <section className="summary-stats">
-                <div className="summary-card">
-                    <span>Reps Completed</span>
+                <p>Your session has been recorded successfully.</p>
+            </div>
 
-                    <strong>{result.completedReps}</strong>
+            <div className="summary-main">
+                <div className="summary-score">
+                    <span>Overall Score</span>
+
+                    <strong>{averageScore}</strong>
+
+                    <small>/ 100</small>
                 </div>
 
-                <div className="summary-card">
-                    <span>Average Score</span>
+                <div className="summary-progress">
+                    <div className="progress-track">
+                        <div
+                            className="progress-fill"
+                            style={{
+                                width: `${completionPercentage}%`,
+                            }}
+                        />
+                    </div>
 
-                    <strong>{Math.round(result.averageScore)}</strong>
+                    <span>
+                        {completedReps} / {targetReps} reps
+                    </span>
+                </div>
+            </div>
+
+            <div className="summary-stats">
+                <div className="summary-stat">
+                    <span>Repetitions</span>
+
+                    <strong>{completedReps}</strong>
                 </div>
 
-                <div className="summary-card">
+                <div className="summary-stat">
+                    <span>Target</span>
+
+                    <strong>{targetReps}</strong>
+                </div>
+
+                <div className="summary-stat">
                     <span>Duration</span>
 
-                    <strong>
-                        {minutes}m {seconds}s
-                    </strong>
+                    <strong>{formatDuration(duration)}</strong>
                 </div>
 
-                <div className="summary-card">
-                    <span>Target Reps</span>
+                <div className="summary-stat">
+                    <span>Status</span>
 
-                    <strong>{assignment.targetReps}</strong>
+                    <strong>{session?.status || "COMPLETED"}</strong>
                 </div>
-            </section>
+            </div>
 
-            <section className="rep-results">
-                <h2>Rep Performance</h2>
+            {repScores.length > 0 && (
+                <div className="rep-score-section">
+                    <h2>Repetition Scores</h2>
 
-                {scores.length === 0 ? (
-                    <p>No repetition scores recorded.</p>
-                ) : (
-                    <div className="rep-list">
-                        {scores.map((score, index) => (
-                            <div className="rep-row" key={index}>
+                    <div className="rep-score-list">
+                        {repScores.map((score, index) => (
+                            <div className="rep-score" key={index}>
                                 <span>Rep {index + 1}</span>
 
                                 <strong>{Math.round(score)}</strong>
                             </div>
                         ))}
                     </div>
-                )}
-            </section>
+                </div>
+            )}
 
-            <div className="summary-actions">
-                <button onClick={() => navigate("/patient")}>
-                    Back to Dashboard
-                </button>
+            <div className="summary-message">
+                {averageScore >= 85 ? (
+                    <>
+                        <strong>Excellent work.</strong>
+
+                        <span>Your movement quality was very good.</span>
+                    </>
+                ) : averageScore >= 70 ? (
+                    <>
+                        <strong>Good session.</strong>
+
+                        <span>Keep working on consistency and form.</span>
+                    </>
+                ) : averageScore >= 50 ? (
+                    <>
+                        <strong>Session completed.</strong>
+
+                        <span>
+                            Focus on controlled movement and proper form.
+                        </span>
+                    </>
+                ) : (
+                    <>
+                        <strong>Keep practicing.</strong>
+
+                        <span>
+                            Try to follow the prescribed movement more closely
+                            next time.
+                        </span>
+                    </>
+                )}
             </div>
+
+            <button
+                type="button"
+                className="summary-back-button"
+                onClick={onBack}
+            >
+                Back to Dashboard
+            </button>
         </div>
     );
-};
+}
+
+function formatDuration(seconds) {
+    const totalSeconds = Number(seconds) || 0;
+
+    const minutes = Math.floor(totalSeconds / 60);
+
+    const remaining = totalSeconds % 60;
+
+    if (minutes === 0) {
+        return `${remaining}s`;
+    }
+
+    return `${minutes}m ${remaining}s`;
+}
 
 export default SessionSummary;

@@ -1,17 +1,13 @@
-import { useEffect, useState } from "react";
-
+import { useEffect, useRef, useState } from "react";
 import PoseTracker from "../components/PoseTracker";
-import SessionSummary from "./SessionSummary";
+import SessionSummary from "../components/SessionSummary";
+
 import { startSession, completeSession } from "../services/api";
 
-const ExerciseSession = ({ assignment }) => {
+function ExerciseSession({ assignment, onBack }) {
     const [session, setSession] = useState(null);
 
     const [latestResult, setLatestResult] = useState(null);
-
-    const [startedAt, setStartedAt] = useState(null);
-
-    const [elapsedTime, setElapsedTime] = useState(0);
 
     const [loading, setLoading] = useState(true);
 
@@ -21,192 +17,266 @@ const ExerciseSession = ({ assignment }) => {
 
     const [completedSession, setCompletedSession] = useState(null);
 
-    // =====================================================
-    // Start backend session
-    // =====================================================
+    const startTimeRef = useRef(null);
+
+    const timerRef = useRef(null);
+
+    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+    // =========================================================
+    // Start Backend Session
+    // =========================================================
 
     useEffect(() => {
-        const createSession = async () => {
+        let mounted = true;
+
+        const initializeSession = async () => {
             try {
                 setLoading(true);
+                setError("");
 
-                const data = await startSession(assignment._id);
+                const response = await startSession(assignment._id);
 
-                setSession(data.session);
+                if (!mounted) {
+                    return;
+                }
 
-                setStartedAt(new Date());
+                setSession(response.session);
+
+                startTimeRef.current = Date.now();
+
+                timerRef.current = setInterval(() => {
+                    if (!startTimeRef.current) {
+                        return;
+                    }
+
+                    const elapsed = Math.floor(
+                        (Date.now() - startTimeRef.current) / 1000,
+                    );
+
+                    setElapsedSeconds(elapsed);
+                }, 1000);
+
+                setLoading(false);
             } catch (err) {
-                setError(err.message);
-            } finally {
+                console.error("Unable to start session:", err);
+
+                if (!mounted) {
+                    return;
+                }
+
+                setError(err.message || "Unable to start exercise session.");
+
                 setLoading(false);
             }
         };
 
-        createSession();
-    }, [assignment]);
+        initializeSession();
 
-    // =====================================================
-    // Timer
-    // =====================================================
+        return () => {
+            mounted = false;
 
-    useEffect(() => {
-        if (!startedAt) {
-            return;
-        }
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [assignment._id]);
 
-        const interval = setInterval(() => {
-            const seconds = Math.floor(
-                (Date.now() - startedAt.getTime()) / 1000,
-            );
+    // =========================================================
+    // Receive Live ROMJudge Result
+    // =========================================================
 
-            setElapsedTime(seconds);
-        }, 1000);
+    const handleResult = (result) => {
+        setLatestResult(result);
+    };
 
-        return () => clearInterval(interval);
-    }, [startedAt]);
+    // =========================================================
+    // Finish Session
+    // =========================================================
 
-    // =====================================================
-    // Finish session
-    // =====================================================
-
-    const finishSession = async () => {
-        if (!session || !latestResult) {
+    const handleFinish = async () => {
+        if (!session || finishing) {
             return;
         }
 
         try {
             setFinishing(true);
+            setError("");
 
-            const result = latestResult;
-
-            const completedReps = result.reps || 0;
-
-            const repScores = result.repScores || [];
+            const reps = latestResult?.reps ?? 0;
 
             const averageScore =
-                repScores.length > 0
-                    ? repScores.reduce((sum, score) => sum + score, 0) /
-                      repScores.length
-                    : 0;
+                latestResult?.averageScore ?? latestResult?.score ?? 0;
 
-            await completeSession(session._id, {
-                completedReps,
-                averageScore: Math.round(averageScore),
+            const repScores = latestResult?.repScores ?? [];
 
-                repScores,
+            const response = await completeSession(session._id, {
+                completedReps: reps,
 
-                duration: elapsedTime,
+                averageScore: averageScore,
+
+                repScores: repScores,
+
+                duration: elapsedSeconds,
             });
 
-            setCompletedSession({
-                ...result,
-                duration: elapsedTime,
-                averageScore,
-            });
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+
+                timerRef.current = null;
+            }
+
+            setCompletedSession(response.session);
         } catch (err) {
-            setError(err.message);
-        } finally {
+            console.error("Unable to complete session:", err);
+
+            setError(err.message || "Unable to complete session.");
+
             setFinishing(false);
         }
     };
 
-    // =====================================================
+    // =========================================================
     // Loading
-    // =====================================================
+    // =========================================================
 
     if (loading) {
-        return <div>Starting exercise session...</div>;
-    }
-
-    if (error) {
         return (
-            <div>
-                <h2>Something went wrong</h2>
-
-                <p>{error}</p>
+            <div className="exercise-session">
+                <div className="session-loading">Starting exercise...</div>
             </div>
         );
     }
 
-    if (completedSession) {
+    // =========================================================
+    // Error
+    // =========================================================
+
+    if (error && !session) {
         return (
-            <SessionSummary assignment={assignment} result={completedSession} />
+            <div className="exercise-session">
+                <div className="session-error">
+                    <p>{error}</p>
+
+                    <button type="button" onClick={onBack}>
+                        Back
+                    </button>
+                </div>
+            </div>
         );
     }
 
-    // =====================================================
-    // Exercise UI
-    // =====================================================
+    // =========================================================
+    // Session Completed
+    // =========================================================
+
+    if (completedSession) {
+        return (
+            <SessionSummary
+                session={completedSession}
+                assignment={assignment}
+                onBack={onBack}
+            />
+        );
+    }
+
+    // =========================================================
+    // Active Session
+    // =========================================================
 
     return (
         <div className="exercise-session">
-            <header>
+            <header className="session-header">
                 <div>
-                    <h1>{assignment.exercise.name}</h1>
+                    <button type="button" onClick={onBack} disabled={finishing}>
+                        ← Back
+                    </button>
 
-                    <p>{assignment.exercise.description}</p>
+                    <h1>{assignment.exercise?.name || "Exercise"}</h1>
+
+                    {assignment.exercise?.description && (
+                        <p>{assignment.exercise.description}</p>
+                    )}
                 </div>
 
-                <div>Target: {assignment.targetReps} reps</div>
+                <div className="session-timer">
+                    {formatTime(elapsedSeconds)}
+                </div>
             </header>
 
-            <main>
-                <PoseTracker
-                    exercise={assignment.exercise}
-                    onResult={setLatestResult}
-                />
+            <div className="session-target">
+                <span>Target</span>
 
-                {latestResult && (
-                    <div className="session-panel">
-                        <div>
-                            <span>Reps</span>
+                <strong>{assignment.targetReps}</strong>
 
-                            <strong>{latestResult.reps}</strong>
-                        </div>
+                <span>reps</span>
 
-                        <div>
-                            <span>Progress</span>
+                {assignment.sets > 1 && (
+                    <>
+                        <span>•</span>
 
-                            <strong>{latestResult.progress}%</strong>
-                        </div>
+                        <strong>{assignment.sets}</strong>
 
-                        <div>
-                            <span>Current Score</span>
-
-                            <strong>{latestResult.lastScore}</strong>
-                        </div>
-
-                        <div>
-                            <span>Average Score</span>
-
-                            <strong>{latestResult.avgScore}</strong>
-                        </div>
-
-                        <div>
-                            <span>Phase</span>
-
-                            <strong>{latestResult.state}</strong>
-                        </div>
-
-                        <div>
-                            <span>Feedback</span>
-
-                            <strong>{latestResult.feedback}</strong>
-                        </div>
-                    </div>
+                        <span>sets</span>
+                    </>
                 )}
+            </div>
 
-                <div className="session-controls">
-                    <button
-                        onClick={finishSession}
-                        disabled={finishing || !latestResult}
-                    >
-                        {finishing ? "Saving..." : "Finish Session"}
-                    </button>
+            {error && <div className="session-error">{error}</div>}
+
+            <PoseTracker
+                exercise={assignment.exercise}
+                onResult={handleResult}
+            />
+
+            <div className="session-actions">
+                <div className="session-live-info">
+                    <div>
+                        <span>Completed</span>
+
+                        <strong>
+                            {latestResult?.reps ?? 0}/{assignment.targetReps}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Current Score</span>
+
+                        <strong>{Math.round(latestResult?.score ?? 0)}</strong>
+                    </div>
+
+                    <div>
+                        <span>Phase</span>
+
+                        <strong>{latestResult?.phase ?? "RESTING"}</strong>
+                    </div>
                 </div>
-            </main>
+
+                <button
+                    type="button"
+                    className="finish-session-button"
+                    onClick={handleFinish}
+                    disabled={finishing}
+                >
+                    {finishing ? "Saving Session..." : "Finish Session"}
+                </button>
+            </div>
         </div>
     );
-};
+}
+
+// =============================================================
+// Helpers
+// =============================================================
+
+function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+
+    const remainingSeconds = seconds % 60;
+
+    return `${String(minutes).padStart(2, "0")}:${String(
+        remainingSeconds,
+    ).padStart(2, "0")}`;
+}
 
 export default ExerciseSession;

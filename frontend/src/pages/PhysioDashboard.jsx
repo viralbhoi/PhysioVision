@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
+
 import {
     getPhysioPatients,
     getExercises,
     assignExercise,
 } from "../services/api";
+
+import ReferenceVideoCalibrator from "./ReferenceVideoCalibrator";
+import PatientProgress from "./PatientProgress";
 
 const PhysioDashboard = () => {
     const [patients, setPatients] = useState([]);
@@ -26,6 +30,14 @@ const PhysioDashboard = () => {
 
     const [error, setError] = useState("");
 
+    const [calibratingExercise, setCalibratingExercise] = useState(false);
+
+    const [viewingProgress, setViewingProgress] = useState(false);
+
+    // =========================================================
+    // Load Dashboard
+    // =========================================================
+
     useEffect(() => {
         loadDashboard();
     }, []);
@@ -33,6 +45,7 @@ const PhysioDashboard = () => {
     const loadDashboard = async () => {
         try {
             setLoading(true);
+            setError("");
 
             const [patientsData, exercisesData] = await Promise.all([
                 getPhysioPatients(),
@@ -43,11 +56,15 @@ const PhysioDashboard = () => {
 
             setExercises(exercisesData.exercises || []);
         } catch (err) {
-            setError(err.message);
+            setError(err.message || "Unable to load dashboard.");
         } finally {
             setLoading(false);
         }
     };
+
+    // =========================================================
+    // Assign Exercise
+    // =========================================================
 
     const handleAssign = async () => {
         if (!selectedPatient || !selectedExercise) {
@@ -56,6 +73,7 @@ const PhysioDashboard = () => {
 
         try {
             setAssigning(true);
+            setError("");
 
             await assignExercise({
                 patientId: selectedPatient._id,
@@ -77,18 +95,76 @@ const PhysioDashboard = () => {
             setTargetReps(10);
             setNotes("");
         } catch (err) {
-            setError(err.message);
+            setError(err.message || "Unable to assign exercise.");
         } finally {
             setAssigning(false);
         }
     };
 
+    // =========================================================
+    // View Patient Progress
+    // =========================================================
+
+    const handleViewProgress = (patient) => {
+        setSelectedPatient(patient);
+
+        setViewingProgress(true);
+    };
+
+    const handleBackFromProgress = () => {
+        setViewingProgress(false);
+
+        setSelectedPatient(null);
+    };
+
+    // =========================================================
+    // Loading
+    // =========================================================
+
     if (loading) {
         return <div className="dashboard">Loading dashboard...</div>;
     }
 
+    // =========================================================
+    // Reference Video Calibration
+    // =========================================================
+
+    if (calibratingExercise) {
+        return (
+            <ReferenceVideoCalibrator
+                onCreated={(exercise) => {
+                    setExercises((previous) => [exercise, ...previous]);
+
+                    setCalibratingExercise(false);
+                }}
+                onCancel={() => setCalibratingExercise(false)}
+            />
+        );
+    }
+
+    // =========================================================
+    // Patient Progress
+    // =========================================================
+
+    if (viewingProgress && selectedPatient) {
+        return (
+            <PatientProgress
+                patient={selectedPatient}
+                onBack={handleBackFromProgress}
+            />
+        );
+    }
+
+    // =========================================================
+    // Dashboard
+    // =========================================================
+
     return (
         <div className="physio-dashboard">
+            {/* ================================================= */}
+            {/* Header */}
+            {/* ================================================= */}
+
             <header className="dashboard-header">
                 <div>
                     <h1>Physiotherapist Dashboard</h1>
@@ -96,14 +172,29 @@ const PhysioDashboard = () => {
                     <p>Manage patients and prescribe exercises.</p>
                 </div>
 
-                <button onClick={loadDashboard}>Refresh</button>
+                <div>
+                    <button type="button" onClick={loadDashboard}>
+                        Refresh
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setCalibratingExercise(true)}
+                    >
+                        Create Exercise
+                    </button>
+                </div>
             </header>
+
+            {/* ================================================= */}
+            {/* Error */}
+            {/* ================================================= */}
 
             {error && <div className="error-message">{error}</div>}
 
-            {/* =========================================
-                Patients
-            ========================================= */}
+            {/* ================================================= */}
+            {/* Patients */}
+            {/* ================================================= */}
 
             <section>
                 <h2>Patients</h2>
@@ -115,23 +206,41 @@ const PhysioDashboard = () => {
                         {patients.map((patient) => {
                             const user = patient.user;
 
+                            const isSelected =
+                                selectedPatient?._id === patient._id;
+
                             return (
                                 <div
                                     className={
-                                        selectedPatient?._id === patient._id
+                                        isSelected
                                             ? "patient-card selected"
                                             : "patient-card"
                                     }
                                     key={patient._id}
-                                    onClick={() => setSelectedPatient(patient)}
                                 >
-                                    <h3>{user?.name || "Patient"}</h3>
+                                    <div
+                                        className="patient-info"
+                                        onClick={() =>
+                                            setSelectedPatient(patient)
+                                        }
+                                    >
+                                        <h3>{user?.name || "Patient"}</h3>
 
-                                    <p>{user?.email}</p>
+                                        <p>{user?.email}</p>
 
-                                    {selectedPatient?._id === patient._id && (
-                                        <strong>Selected</strong>
-                                    )}
+                                        {isSelected && (
+                                            <strong>Selected</strong>
+                                        )}
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            handleViewProgress(patient)
+                                        }
+                                    >
+                                        View Progress
+                                    </button>
                                 </div>
                             );
                         })}
@@ -139,9 +248,9 @@ const PhysioDashboard = () => {
                 )}
             </section>
 
-            {/* =========================================
-                Exercises
-            ========================================= */}
+            {/* ================================================= */}
+            {/* Exercises */}
+            {/* ================================================= */}
 
             <section>
                 <h2>Exercises</h2>
@@ -150,34 +259,40 @@ const PhysioDashboard = () => {
                     <p>No exercises available.</p>
                 ) : (
                     <div className="exercise-grid">
-                        {exercises.map((exercise) => (
-                            <div
-                                className={
-                                    selectedExercise?._id === exercise._id
-                                        ? "exercise-card selected"
-                                        : "exercise-card"
-                                }
-                                key={exercise._id}
-                                onClick={() => setSelectedExercise(exercise)}
-                            >
-                                <h3>{exercise.name}</h3>
+                        {exercises.map((exercise) => {
+                            const isSelected =
+                                selectedExercise?._id === exercise._id;
 
-                                <p>
-                                    {exercise.description || "No description."}
-                                </p>
+                            return (
+                                <div
+                                    className={
+                                        isSelected
+                                            ? "exercise-card selected"
+                                            : "exercise-card"
+                                    }
+                                    key={exercise._id}
+                                    onClick={() =>
+                                        setSelectedExercise(exercise)
+                                    }
+                                >
+                                    <h3>{exercise.name}</h3>
 
-                                {selectedExercise?._id === exercise._id && (
-                                    <strong>Selected</strong>
-                                )}
-                            </div>
-                        ))}
+                                    <p>
+                                        {exercise.description ||
+                                            "No description."}
+                                    </p>
+
+                                    {isSelected && <strong>Selected</strong>}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </section>
 
-            {/* =========================================
-                Assignment Form
-            ========================================= */}
+            {/* ================================================= */}
+            {/* Assignment Form */}
+            {/* ================================================= */}
 
             <section className="assignment-form">
                 <h2>Assign Exercise</h2>
@@ -203,7 +318,7 @@ const PhysioDashboard = () => {
                         type="number"
                         min="1"
                         value={sets}
-                        onChange={(e) => setSets(e.target.value)}
+                        onChange={(event) => setSets(event.target.value)}
                     />
                 </label>
 
@@ -213,7 +328,7 @@ const PhysioDashboard = () => {
                         type="number"
                         min="1"
                         value={targetReps}
-                        onChange={(e) => setTargetReps(e.target.value)}
+                        onChange={(event) => setTargetReps(event.target.value)}
                     />
                 </label>
 
@@ -221,12 +336,13 @@ const PhysioDashboard = () => {
                     Notes
                     <textarea
                         value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
+                        onChange={(event) => setNotes(event.target.value)}
                         placeholder="Instructions for the patient..."
                     />
                 </label>
 
                 <button
+                    type="button"
                     onClick={handleAssign}
                     disabled={
                         assigning || !selectedPatient || !selectedExercise

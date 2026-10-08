@@ -1,22 +1,37 @@
+import DTWMatcher from "./DTWMatcher.js";
+
 class ROMJudge {
-    constructor(config) {
+    constructor(config = {}) {
         this.config = config || {};
 
-        // -----------------------------------------
+        // =========================================================
+        // DTW
+        // =========================================================
+
+        this.dtwMatcher = new DTWMatcher();
+
+        // Trajectory for CURRENT repetition only
+        this.currentTrajectory = [];
+
+        // =========================================================
         // State
-        // -----------------------------------------
+        // =========================================================
 
         this.state = "RESTING";
+
         this.reps = 0;
 
         this.lastRepScore = 0;
+
         this.totalScoreAccumulator = 0;
+
         this.averageScore = 0;
+
         this.repScores = [];
 
-        // -----------------------------------------
+        // =========================================================
         // Configuration
-        // -----------------------------------------
+        // =========================================================
 
         this.primaryJoints =
             this.config.primaryJoints || this.config.primary_joints || [];
@@ -30,38 +45,43 @@ class ROMJudge {
 
         this.tolerance = this.config.tolerance ?? 15;
 
-        // -----------------------------------------
+        // =========================================================
         // EMA smoothing
-        // -----------------------------------------
+        // =========================================================
 
         this.smoothedAngles = {};
+
         this.alpha = 0.35;
 
-        // -----------------------------------------
+        // =========================================================
         // ROM tracking
-        // -----------------------------------------
+        // =========================================================
 
         this.maxAchievedPct = 0;
+
         this.minAchievedPct = 1;
 
-        // -----------------------------------------
+        // =========================================================
         // Strict cycle thresholds
-        // -----------------------------------------
+        // =========================================================
 
         this.BOTTOM_THRESHOLD = 0.2;
+
         this.TOP_THRESHOLD = 0.45;
+
         this.HYSTERESIS = 0.1;
 
-        // -----------------------------------------
+        // =========================================================
         // Rep validation
-        // -----------------------------------------
+        // =========================================================
 
         this.validPeakReached = false;
+
         this.currentRepErrors = [];
 
-        // -----------------------------------------
+        // =========================================================
         // Live starting posture
-        // -----------------------------------------
+        // =========================================================
 
         this.liveBaselines = null;
     }
@@ -81,7 +101,12 @@ class ROMJudge {
 
         const values = this.primaryJoints
             .map((joint) => frame[joint])
-            .filter((value) => value !== undefined && value !== null);
+            .filter(
+                (value) =>
+                    value !== undefined &&
+                    value !== null &&
+                    Number.isFinite(value),
+            );
 
         if (!values.length) {
             return 0;
@@ -104,8 +129,13 @@ class ROMJudge {
                 continue;
             }
 
-            const minAngle = Number(jointConfig.min_angle ?? 0);
-            const maxAngle = Number(jointConfig.max_angle ?? 180);
+            const minAngle = Number(
+                jointConfig.min_angle ?? jointConfig.min ?? 0,
+            );
+
+            const maxAngle = Number(
+                jointConfig.max_angle ?? jointConfig.max ?? 180,
+            );
 
             const baseAngle = this.liveBaselines
                 ? (this.liveBaselines[joint] ?? minAngle)
@@ -118,7 +148,9 @@ class ROMJudge {
                 Math.abs(minAngle - baseAngle),
             );
 
-            // Prevent extremely small ranges
+            // Prevent extremely small
+            // ranges from creating
+            // unstable percentages.
             if (maxPossibleMovement < 10) {
                 maxPossibleMovement = 10;
             }
@@ -134,8 +166,9 @@ class ROMJudge {
             return 0;
         }
 
-        // Bilateral exercise:
-        // minimum side determines overall completion.
+        // For bilateral exercises,
+        // the weaker side determines
+        // overall completion.
         return Math.min(...percentages);
     }
 
@@ -151,6 +184,7 @@ class ROMJudge {
         const userTarget = this.getAveragePrimary(userAngles);
 
         let bestFrame = null;
+
         let smallestDifference = Infinity;
 
         for (const frame of this.goldenTrajectory) {
@@ -160,6 +194,7 @@ class ROMJudge {
 
             if (difference < smallestDifference) {
                 smallestDifference = difference;
+
                 bestFrame = frame;
             }
         }
@@ -179,20 +214,34 @@ class ROMJudge {
         }
 
         let errorSum = 0;
+
         let jointsCompared = 0;
 
-        for (const joint of this.activeJoints) {
+        /*
+         * Prefer primary joints because
+         * the generated golden trajectory
+         * may contain only those joints.
+         *
+         * Fall back to active joints when
+         * primary joints aren't available.
+         */
+        const joints = this.primaryJoints.length
+            ? this.primaryJoints
+            : this.activeJoints;
+
+        for (const joint of joints) {
             const userAngle = userAngles[joint];
+
             const goldenAngle = bestFrame[joint];
 
-            if (userAngle !== undefined && goldenAngle !== undefined) {
+            if (Number.isFinite(userAngle) && Number.isFinite(goldenAngle)) {
                 errorSum += Math.abs(userAngle - goldenAngle);
 
                 jointsCompared++;
             }
         }
 
-        if (jointsCompared === 0) {
+        if (!jointsCompared) {
             return 100;
         }
 
@@ -203,6 +252,76 @@ class ROMJudge {
         }
 
         return Math.max(0, 100 - (averageError - 5) * 4);
+    }
+
+    // =========================================================
+    // Normalize trajectory
+    // =========================================================
+
+    normalizeTrajectory(trajectory) {
+        if (!trajectory?.length) {
+            return [];
+        }
+
+        return trajectory.map((point) => {
+            const normalized = {};
+
+            for (const [joint, value] of Object.entries(point)) {
+                if (!Number.isFinite(value)) {
+                    continue;
+                }
+
+                const range = this.allJoints[joint];
+
+                if (!range) {
+                    normalized[joint] = value;
+
+                    continue;
+                }
+
+                const min = Number(range.min_angle ?? range.min ?? 0);
+
+                const max = Number(range.max_angle ?? range.max ?? 180);
+
+                const rom = max - min;
+
+                if (rom <= 0) {
+                    normalized[joint] = value;
+
+                    continue;
+                }
+
+                normalized[joint] = (value - min) / rom;
+            }
+
+            return normalized;
+        });
+    }
+
+    // =========================================================
+    // DTW repetition score
+    // =========================================================
+
+    calculateTrajectoryScore() {
+        if (!this.goldenTrajectory?.length || !this.currentTrajectory?.length) {
+            return 100;
+        }
+
+        if (this.currentTrajectory.length < 2) {
+            return 100;
+        }
+
+        const reference = this.normalizeTrajectory(this.goldenTrajectory);
+
+        const user = this.normalizeTrajectory(this.currentTrajectory);
+
+        if (!reference.length || !user.length) {
+            return 100;
+        }
+
+        const score = this.dtwMatcher.similarity(reference, user);
+
+        return this.clamp(score, 0, 100);
     }
 
     // =========================================================
@@ -227,13 +346,15 @@ class ROMJudge {
         }
 
         const uiList = [];
+
         const ttsList = [];
 
         for (const joint of this.primaryJoints) {
             const userAngle = userAngles[joint];
+
             const goldenAngle = bestFrame[joint];
 
-            if (userAngle === undefined || goldenAngle === undefined) {
+            if (!Number.isFinite(userAngle) || !Number.isFinite(goldenAngle)) {
                 continue;
             }
 
@@ -297,7 +418,16 @@ class ROMJudge {
 
         const goldenPlane = bestFrame[planeKey];
 
-        if (userPlane === undefined || goldenPlane === undefined) {
+        /*
+         * Current golden trajectory
+         * generated by Calibrator may
+         * contain only primary joints.
+         *
+         * Therefore don't reject the
+         * movement if plane information
+         * wasn't stored.
+         */
+        if (!Number.isFinite(userPlane) || !Number.isFinite(goldenPlane)) {
             return {
                 valid: true,
                 message: "",
@@ -319,6 +449,7 @@ class ROMJudge {
 
         return {
             valid: false,
+
             message:
                 `BRING ${part} MORE ${action} ` +
                 `(${Math.round(Math.abs(planeDifference) * 10) / 10}°)`,
@@ -333,7 +464,7 @@ class ROMJudge {
         const cleanAngles = {};
 
         for (const [joint, angle] of Object.entries(rawAngles || {})) {
-            if (angle !== null && angle !== undefined) {
+            if (Number.isFinite(angle)) {
                 if (this.smoothedAngles[joint] === undefined) {
                     this.smoothedAngles[joint] = angle;
                 } else {
@@ -360,7 +491,7 @@ class ROMJudge {
 
         const valid = this.primaryJoints.every(
             (joint) =>
-                cleanAngles[joint] !== undefined && cleanAngles[joint] > 0,
+                Number.isFinite(cleanAngles[joint]) && cleanAngles[joint] > 0,
         );
 
         if (!valid) {
@@ -377,6 +508,40 @@ class ROMJudge {
     }
 
     // =========================================================
+    // Record current frame for
+    // current repetition
+    // =========================================================
+
+    recordTrajectoryFrame(cleanAngles) {
+        const point = {};
+
+        /*
+         * Primary joints are always
+         * needed for DTW.
+         */
+        for (const joint of this.primaryJoints) {
+            if (Number.isFinite(cleanAngles[joint])) {
+                point[joint] = cleanAngles[joint];
+            }
+        }
+
+        /*
+         * Also preserve plane angles
+         * when they exist in the golden
+         * trajectory.
+         */
+        for (const key of Object.keys(cleanAngles)) {
+            if (key.endsWith("_plane") && Number.isFinite(cleanAngles[key])) {
+                point[key] = cleanAngles[key];
+            }
+        }
+
+        if (Object.keys(point).length) {
+            this.currentTrajectory.push(point);
+        }
+    }
+
+    // =========================================================
     // Complete a repetition
     // =========================================================
 
@@ -385,6 +550,10 @@ class ROMJudge {
             return;
         }
 
+        // -----------------------------------------------------
+        // 1. Movement score
+        // -----------------------------------------------------
+
         const movementScore = this.clamp(
             ((this.maxAchievedPct - this.minAchievedPct) / this.TOP_THRESHOLD) *
                 100,
@@ -392,15 +561,42 @@ class ROMJudge {
             100,
         );
 
-        const formAccuracy = this.currentRepErrors.length
+        // -----------------------------------------------------
+        // 2. Frame/form accuracy
+        // -----------------------------------------------------
+
+        const frameAccuracy = this.currentRepErrors.length
             ? this.currentRepErrors.reduce((sum, value) => sum + value, 0) /
               this.currentRepErrors.length
             : 100;
 
-        const calculatedScore =
-            Math.round((movementScore * 0.7 + formAccuracy * 0.3) * 10) / 10;
+        // -----------------------------------------------------
+        // 3. DTW trajectory score
+        // -----------------------------------------------------
 
-        // Rep accepted only if score >= 50
+        const trajectoryScore = this.calculateTrajectoryScore();
+
+        /*
+         * Preserve the old 70/30
+         * movement-vs-form philosophy,
+         * but make form consist of:
+         *
+         * 70% frame accuracy
+         * 30% trajectory similarity
+         */
+        const formScore = frameAccuracy * 0.7 + trajectoryScore * 0.3;
+
+        // -----------------------------------------------------
+        // 4. Final repetition score
+        // -----------------------------------------------------
+
+        const calculatedScore =
+            Math.round((movementScore * 0.7 + formScore * 0.3) * 10) / 10;
+
+        // -----------------------------------------------------
+        // 5. Accept repetition
+        // -----------------------------------------------------
+
         if (calculatedScore >= 50) {
             this.reps++;
 
@@ -412,6 +608,12 @@ class ROMJudge {
 
             this.repScores.push(calculatedScore);
         }
+
+        /*
+         * Always clear the trajectory
+         * after evaluating the rep.
+         */
+        this.currentTrajectory = [];
     }
 
     // =========================================================
@@ -420,11 +622,22 @@ class ROMJudge {
 
     resetCycle() {
         this.state = "RESTING";
+
         this.validPeakReached = false;
+
         this.currentRepErrors = [];
 
         this.maxAchievedPct = 0;
+
         this.minAchievedPct = 1;
+
+        /*
+         * Safety reset.
+         *
+         * Normally completeRepetition()
+         * already clears this.
+         */
+        this.currentTrajectory = [];
     }
 
     // =========================================================
@@ -432,80 +645,107 @@ class ROMJudge {
     // =========================================================
 
     processFrame(rawAngles) {
-        // -----------------------------------------
+        // =====================================================
         // 1. Smooth raw angles
-        // -----------------------------------------
+        // =====================================================
 
         const cleanAngles = this.smoothAngles(rawAngles);
 
-        // -----------------------------------------
+        // =====================================================
         // 2. Live calibration
-        // -----------------------------------------
+        // =====================================================
 
         if (!this.calibrateBaseline(cleanAngles)) {
             return {
                 reps: this.reps,
+
                 state: "CALIBRATING",
+
                 progress: 0,
+
                 lastScore: 0,
+
                 avgScore: 0,
+
                 repScores: [...this.repScores],
+
                 feedback: "Get in starting position...",
+
                 ttsFeedback: "",
+
+                frameAccuracy: 0,
+
+                planeValid: true,
             };
         }
 
-        // -----------------------------------------
+        // =====================================================
         // 3. Calculate movement percentage
-        // -----------------------------------------
+        // =====================================================
 
         const pct = this.getCompletionPercentage(cleanAngles);
 
-        // -----------------------------------------
-        // 4. Calculate form accuracy
-        // -----------------------------------------
+        // =====================================================
+        // 4. Calculate frame accuracy
+        // =====================================================
 
         const frameAccuracy = this.calculateFrameAccuracy(cleanAngles);
 
-        // -----------------------------------------
+        // =====================================================
         // 5. Plane gatekeeper
-        // -----------------------------------------
+        // =====================================================
 
         const plane = this.validatePlane(cleanAngles);
 
         const planeIsValid = plane.valid;
 
-        // -----------------------------------------
+        // =====================================================
         // 6. Strict repetition FSM
-        // -----------------------------------------
+        // =====================================================
 
         if (this.state === "RESTING") {
             if (pct > this.BOTTOM_THRESHOLD && planeIsValid) {
                 this.state = "LIFTING";
 
                 this.maxAchievedPct = pct;
+
                 this.minAchievedPct = 1;
 
                 this.currentRepErrors = [frameAccuracy];
 
                 this.validPeakReached = false;
+
+                /*
+                 * First frame of the
+                 * repetition.
+                 */
+                this.recordTrajectoryFrame(cleanAngles);
             }
         } else if (this.state === "LIFTING") {
             this.maxAchievedPct = Math.max(this.maxAchievedPct, pct);
 
             this.currentRepErrors.push(frameAccuracy);
 
+            this.recordTrajectoryFrame(cleanAngles);
+
+            // -------------------------------------------------
             // Reached valid peak
+            // -------------------------------------------------
+
             if (pct >= this.TOP_THRESHOLD) {
                 if (planeIsValid) {
                     this.state = "PEAK";
+
                     this.validPeakReached = true;
                 }
             }
 
+            // -------------------------------------------------
             // Started moving downward
+            // -------------------------------------------------
             else if (pct < this.maxAchievedPct - this.HYSTERESIS) {
                 this.state = "LOWERING";
+
                 this.minAchievedPct = pct;
             }
         } else if (this.state === "PEAK") {
@@ -513,8 +753,11 @@ class ROMJudge {
 
             this.currentRepErrors.push(frameAccuracy);
 
+            this.recordTrajectoryFrame(cleanAngles);
+
             if (pct < this.maxAchievedPct - this.HYSTERESIS) {
                 this.state = "LOWERING";
+
                 this.minAchievedPct = pct;
             }
         } else if (this.state === "LOWERING") {
@@ -522,11 +765,16 @@ class ROMJudge {
 
             this.currentRepErrors.push(frameAccuracy);
 
+            this.recordTrajectoryFrame(cleanAngles);
+
             const isResting = pct <= this.BOTTOM_THRESHOLD;
 
             const isBouncing = pct > this.minAchievedPct + this.HYSTERESIS;
 
+            // -------------------------------------------------
             // Returned to starting position
+            // -------------------------------------------------
+
             if (isResting) {
                 if (this.validPeakReached) {
                     this.completeRepetition();
@@ -535,16 +783,19 @@ class ROMJudge {
                 this.resetCycle();
             }
 
-            // User bounced back upward
+            // -------------------------------------------------
+            // User bounced upward
+            // -------------------------------------------------
             else if (isBouncing) {
                 this.state = "LIFTING";
+
                 this.maxAchievedPct = pct;
             }
         }
 
-        // -----------------------------------------
+        // =====================================================
         // 7. Generate feedback
-        // -----------------------------------------
+        // =====================================================
 
         const feedback = this.generateLiveFeedback(cleanAngles);
 
@@ -552,7 +803,10 @@ class ROMJudge {
 
         let currentTTSFeedback = feedback.tts;
 
-        // Plane error overrides form feedback
+        // -----------------------------------------------------
+        // Plane error overrides form
+        // -----------------------------------------------------
+
         if (!planeIsValid && pct > this.BOTTOM_THRESHOLD) {
             currentUIFeedback = plane.message;
 
@@ -565,15 +819,15 @@ class ROMJudge {
             currentTTSFeedback = `Bring your ${part} ${action}`;
         }
 
-        // -----------------------------------------
+        // =====================================================
         // 8. UI progress
-        // -----------------------------------------
+        // =====================================================
 
         const uiProgress = Math.min(100, (pct / this.TOP_THRESHOLD) * 100);
 
-        // -----------------------------------------
+        // =====================================================
         // 9. Return frame result
-        // -----------------------------------------
+        // =====================================================
 
         return {
             reps: this.reps,
@@ -592,7 +846,6 @@ class ROMJudge {
 
             ttsFeedback: currentTTSFeedback,
 
-            // Useful internally/UI
             frameAccuracy: Math.round(frameAccuracy * 10) / 10,
 
             planeValid: planeIsValid,
@@ -623,7 +876,9 @@ class ROMJudge {
         this.reps = 0;
 
         this.lastRepScore = 0;
+
         this.totalScoreAccumulator = 0;
+
         this.averageScore = 0;
 
         this.repScores = [];
@@ -631,12 +886,16 @@ class ROMJudge {
         this.smoothedAngles = {};
 
         this.maxAchievedPct = 0;
+
         this.minAchievedPct = 1;
 
         this.validPeakReached = false;
+
         this.currentRepErrors = [];
 
         this.liveBaselines = null;
+
+        this.currentTrajectory = [];
     }
 }
 

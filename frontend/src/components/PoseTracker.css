@@ -1,0 +1,120 @@
+.pose-tracker {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.pose-video-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 16px;
+    background: #111;
+}
+
+.pose-video,
+.pose-canvas {
+    position: absolute;
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+
+    object-fit: cover;
+}
+
+.pose-video {
+    transform: scaleX(-1);
+}
+
+.pose-canvas {
+    transform: scaleX(-1);
+}
+
+.pose-loading,
+.pose-error,
+.pose-overlay {
+    padding: 16px;
+    text-align: center;
+}
+
+.pose-error {
+    margin-bottom: 12px;
+    border-radius: 10px;
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.pose-overlay {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    color: white;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.pose-stats {
+    display: grid;
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.pose-stat {
+    padding: 16px;
+
+    border-radius: 12px;
+    background: #f5f5f5;
+}
+
+.pose-stat span {
+    display: block;
+
+    margin-bottom: 6px;
+
+    font-size: 13px;
+    color: #666;
+}
+
+.pose-stat strong {
+    font-size: 24px;
+}
+
+.pose-feedback {
+    margin-top: 16px;
+    padding: 14px;
+
+    border-radius: 10px;
+
+    text-align: center;
+    font-weight: 600;
+}
+
+.pose-controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.pose-controls button {
+    padding: 10px 16px;
+
+    border: 0;
+    border-radius: 8px;
+
+    cursor: pointer;
+}
+
+@media (max-width: 700px) {
+    .pose-stats {
+        grid-template-columns:
+            repeat(2, 1fr);
+    }
+}

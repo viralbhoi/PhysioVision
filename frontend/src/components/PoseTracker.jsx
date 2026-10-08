@@ -1,36 +1,42 @@
 import { useEffect, useRef, useState } from "react";
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
-import PhysioGeometry from "../engine/geometry.js";
-import ROMJudge from "../engine/ROMJudge.js";
+import PhysioGeometry from "../engine/geometry";
+import ROMJudge from "../engine/ROMJudge";
+import FeedbackEngine from "../engine/FeedbackEngine";
 
-const PoseTracker = ({ exercise }) => {
+import "./PoseTracker.css";
+
+const MODEL_URL =
+    "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+
+const WASM_URL =
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
+
+const VIDEO_WIDTH = 1280;
+const VIDEO_HEIGHT = 720;
+
+function PoseTracker({ exercise, onResult, onReady, onStop }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
 
     const poseLandmarkerRef = useRef(null);
-    const animationRef = useRef(null);
+    const animationFrameRef = useRef(null);
+    const streamRef = useRef(null);
 
     const judgeRef = useRef(null);
+    const feedbackRef = useRef(null);
 
-    const [isReady, setIsReady] = useState(false);
+    const lastVideoTimeRef = useRef(-1);
+    const runningRef = useRef(false);
+
+    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
-
-    const [result, setResult] = useState({
-        reps: 0,
-        state: "CALIBRATING",
-        progress: 0,
-        lastScore: 0,
-        avgScore: 0,
-        repScores: [],
-        feedback: "Get in starting position...",
-        ttsFeedback: "",
-        frameAccuracy: 0,
-        planeValid: true,
-    });
+    const [cameraReady, setCameraReady] = useState(false);
+    const [result, setResult] = useState(null);
 
     // =========================================================
-    // Create ROM Judge whenever exercise changes
+    // Initialize ROM Judge
     // =========================================================
 
     useEffect(() => {
@@ -39,22 +45,17 @@ const PoseTracker = ({ exercise }) => {
             return;
         }
 
-        const configuration = exercise.configuration || exercise;
+        judgeRef.current = new ROMJudge(exercise.configuration || exercise);
 
-        judgeRef.current = new ROMJudge(configuration);
+        feedbackRef.current = new FeedbackEngine();
 
-        setResult({
-            reps: 0,
-            state: "CALIBRATING",
-            progress: 0,
-            lastScore: 0,
-            avgScore: 0,
-            repScores: [],
-            feedback: "Get in starting position...",
-            ttsFeedback: "",
-            frameAccuracy: 0,
-            planeValid: true,
-        });
+        return () => {
+            judgeRef.current?.reset();
+            feedbackRef.current?.reset();
+
+            judgeRef.current = null;
+            feedbackRef.current = null;
+        };
     }, [exercise]);
 
     // =========================================================
@@ -62,22 +63,21 @@ const PoseTracker = ({ exercise }) => {
     // =========================================================
 
     useEffect(() => {
-        let cancelled = false;
+        let mounted = true;
 
-        const initializePose = async () => {
+        const initializePoseLandmarker = async () => {
             try {
+                setIsLoading(true);
                 setError("");
 
-                const vision = await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
-                );
+                const vision = await FilesetResolver.forVisionTasks(WASM_URL);
 
                 const poseLandmarker = await PoseLandmarker.createFromOptions(
                     vision,
                     {
                         baseOptions: {
-                            modelAssetPath:
-                                "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+                            modelAssetPath: MODEL_URL,
+                            delegate: "GPU",
                         },
 
                         runningMode: "VIDEO",
@@ -85,178 +85,275 @@ const PoseTracker = ({ exercise }) => {
                         numPoses: 1,
 
                         minPoseDetectionConfidence: 0.6,
+
                         minPosePresenceConfidence: 0.6,
+
                         minTrackingConfidence: 0.6,
                     },
                 );
 
-                if (cancelled) {
+                if (!mounted) {
                     poseLandmarker.close();
                     return;
                 }
 
                 poseLandmarkerRef.current = poseLandmarker;
 
-                // ---------------------------------------------
-                // Camera
-                // ---------------------------------------------
+                setIsLoading(false);
 
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: 1280,
-                        height: 720,
-                        facingMode: "user",
-                    },
-                    audio: false,
-                });
+                if (onReady) {
+                    onReady();
+                }
 
-                if (cancelled) {
-                    stream.getTracks().forEach((track) => track.stop());
+                await startCamera();
+            } catch (err) {
+                console.error("PoseLandmarker initialization failed:", err);
 
-                    poseLandmarker.close();
+                if (!mounted) {
                     return;
                 }
 
-                const video = videoRef.current;
+                setError(err.message || "Unable to initialize pose tracking.");
 
-                video.srcObject = stream;
-
-                await video.play();
-
-                setIsReady(true);
-
-                detectPose();
-            } catch (err) {
-                console.error(err);
-
-                setError("Unable to initialize camera or pose tracking.");
+                setIsLoading(false);
             }
         };
 
-        initializePose();
-
-        // =====================================================
-        // Cleanup
-        // =====================================================
+        initializePoseLandmarker();
 
         return () => {
-            cancelled = true;
+            mounted = false;
 
-            if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current);
-            }
-
-            if (videoRef.current?.srcObject) {
-                videoRef.current.srcObject
-                    .getTracks()
-                    .forEach((track) => track.stop());
-
-                videoRef.current.srcObject = null;
-            }
-
-            if (poseLandmarkerRef.current) {
-                poseLandmarkerRef.current.close();
-                poseLandmarkerRef.current = null;
-            }
+            stopTracking();
         };
     }, []);
 
     // =========================================================
-    // Pose processing loop
+    // Start Camera
     // =========================================================
 
-    const detectPose = () => {
-        const video = videoRef.current;
+    const startCamera = async () => {
+        try {
+            if (!navigator.mediaDevices?.getUserMedia) {
+                throw new Error(
+                    "Camera access is not supported by this browser.",
+                );
+            }
 
-        const canvas = canvasRef.current;
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: {
+                        ideal: VIDEO_WIDTH,
+                    },
+                    height: {
+                        ideal: VIDEO_HEIGHT,
+                    },
+                    facingMode: "user",
+                },
+                audio: false,
+            });
+
+            streamRef.current = stream;
+
+            const video = videoRef.current;
+
+            if (!video) {
+                return;
+            }
+
+            video.srcObject = stream;
+
+            video.setAttribute("playsinline", "");
+
+            await video.play();
+
+            setCameraReady(true);
+
+            runningRef.current = true;
+
+            processVideoFrame();
+        } catch (err) {
+            console.error("Camera initialization failed:", err);
+
+            setError(err.message || "Unable to access camera.");
+        }
+    };
+
+    // =========================================================
+    // Main Video Loop
+    // =========================================================
+
+    const processVideoFrame = () => {
+        if (!runningRef.current) {
+            return;
+        }
+
+        const video = videoRef.current;
 
         const poseLandmarker = poseLandmarkerRef.current;
 
         if (
             !video ||
-            !canvas ||
             !poseLandmarker ||
             video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
         ) {
-            animationRef.current = requestAnimationFrame(detectPose);
+            animationFrameRef.current =
+                requestAnimationFrame(processVideoFrame);
 
             return;
         }
 
-        const ctx = canvas.getContext("2d");
+        /*
+         * MediaPipe requires an increasing
+         * timestamp for VIDEO mode.
+         */
+        const currentTime = video.currentTime;
 
-        // Match canvas to actual video
-        if (
-            canvas.width !== video.videoWidth ||
-            canvas.height !== video.videoHeight
-        ) {
-            canvas.width = video.videoWidth;
+        if (currentTime !== lastVideoTimeRef.current) {
+            lastVideoTimeRef.current = currentTime;
 
-            canvas.height = video.videoHeight;
+            const timestamp = performance.now();
+
+            try {
+                const detection = poseLandmarker.detectForVideo(
+                    video,
+                    timestamp,
+                );
+
+                handleDetection(detection);
+            } catch (err) {
+                console.error("Pose detection failed:", err);
+            }
         }
 
-        // =====================================================
-        // MediaPipe detection
-        // =====================================================
-
-        const timestamp = performance.now();
-
-        const detection = poseLandmarker.detectForVideo(video, timestamp);
-
-        // =====================================================
-        // Draw video skeleton
-        // =====================================================
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        if (detection.landmarks && detection.landmarks.length > 0) {
-            const landmarks = detection.landmarks[0];
-
-            drawSkeleton(ctx, landmarks, canvas.width, canvas.height);
-        }
-
-        // =====================================================
-        // REAL-TIME ENGINE
-        // =====================================================
-
-        if (
-            detection.worldLandmarks &&
-            detection.worldLandmarks.length > 0 &&
-            judgeRef.current
-        ) {
-            const worldLandmarks = detection.worldLandmarks[0];
-
-            // ---------------------------------------------
-            // 1. Calculate biomechanical angles
-            // ---------------------------------------------
-
-            const angles = PhysioGeometry.getStandardAngles(worldLandmarks);
-
-            // ---------------------------------------------
-            // 2. ROM Judge
-            // ---------------------------------------------
-
-            const judgeResult = judgeRef.current.processFrame(angles);
-
-            setResult(judgeResult);
-        }
-
-        animationRef.current = requestAnimationFrame(detectPose);
+        animationFrameRef.current = requestAnimationFrame(processVideoFrame);
     };
 
     // =========================================================
-    // Skeleton drawing
+    // Handle MediaPipe Result
     // =========================================================
 
-    const drawSkeleton = (ctx, landmarks, width, height) => {
+    const handleDetection = (detection) => {
+        if (!detection || !detection.landmarks?.length) {
+            drawCanvas(null);
+
+            return;
+        }
+
+        const landmarks = detection.landmarks[0];
+
+        const worldLandmarks = detection.worldLandmarks?.[0];
+
+        /*
+         * World landmarks are required
+         * for biomechanical calculations.
+         *
+         * 2D landmarks are only used
+         * for visualization.
+         */
+        if (!worldLandmarks) {
+            drawCanvas(landmarks);
+
+            return;
+        }
+
+        drawCanvas(landmarks);
+
+        if (!judgeRef.current) {
+            return;
+        }
+
+        // =====================================================
+        // Landmark → Joint Angles
+        // =====================================================
+
+        const angles = PhysioGeometry.getStandardAngles(worldLandmarks);
+
+        if (!angles) {
+            return;
+        }
+
+        // =====================================================
+        // ROM Judge
+        // =====================================================
+
+        const judgeResult = judgeRef.current.processFrame(angles);
+
+        if (!judgeResult) {
+            return;
+        }
+
+        // =====================================================
+        // Audio Feedback
+        // =====================================================
+
+        if (judgeResult.feedback && feedbackRef.current) {
+            feedbackRef.current.speak(judgeResult.feedback);
+        }
+
+        // =====================================================
+        // Update UI
+        // =====================================================
+
+        setResult(judgeResult);
+
+        // =====================================================
+        // Send result to parent
+        // =====================================================
+
+        if (onResult) {
+            onResult(judgeResult);
+        }
+    };
+
+    // =========================================================
+    // Canvas Drawing
+    // =========================================================
+
+    const drawCanvas = (landmarks) => {
+        const canvas = canvasRef.current;
+
+        const video = videoRef.current;
+
+        if (!canvas || !video) {
+            return;
+        }
+
+        const context = canvas.getContext("2d");
+
+        if (!context) {
+            return;
+        }
+
+        const width = video.videoWidth || VIDEO_WIDTH;
+
+        const height = video.videoHeight || VIDEO_HEIGHT;
+
+        canvas.width = width;
+        canvas.height = height;
+
+        context.clearRect(0, 0, width, height);
+
+        if (!landmarks) {
+            return;
+        }
+
+        drawPose(context, landmarks, width, height);
+    };
+
+    // =========================================================
+    // Skeleton Drawing
+    // =========================================================
+
+    const drawPose = (context, landmarks, width, height) => {
         const connections = [
+            [11, 12],
+
             [11, 13],
             [13, 15],
 
             [12, 14],
             [14, 16],
-
-            [11, 12],
 
             [11, 23],
             [12, 24],
@@ -273,49 +370,97 @@ const PoseTracker = ({ exercise }) => {
             [28, 32],
         ];
 
-        ctx.lineWidth = 3;
+        context.lineWidth = 4;
 
-        // ---------------------------------------------
-        // Connections
-        // ---------------------------------------------
-
-        connections.forEach(([startIndex, endIndex]) => {
+        for (const [startIndex, endIndex] of connections) {
             const start = landmarks[startIndex];
 
             const end = landmarks[endIndex];
 
             if (!start || !end) {
-                return;
+                continue;
             }
 
-            if ((start.visibility ?? 1) < 0.4 || (end.visibility ?? 1) < 0.4) {
-                return;
+            if ((start.visibility ?? 1) < 0.3 || (end.visibility ?? 1) < 0.3) {
+                continue;
             }
 
-            ctx.beginPath();
+            context.beginPath();
 
-            ctx.moveTo(start.x * width, start.y * height);
+            context.moveTo(start.x * width, start.y * height);
 
-            ctx.lineTo(end.x * width, end.y * height);
+            context.lineTo(end.x * width, end.y * height);
 
-            ctx.stroke();
-        });
+            context.stroke();
+        }
 
-        // ---------------------------------------------
-        // Landmark points
-        // ---------------------------------------------
-
-        landmarks.forEach((landmark) => {
-            if ((landmark.visibility ?? 1) < 0.4) {
-                return;
+        for (const landmark of landmarks) {
+            if (!landmark || (landmark.visibility ?? 1) < 0.3) {
+                continue;
             }
 
-            ctx.beginPath();
+            const x = landmark.x * width;
 
-            ctx.arc(landmark.x * width, landmark.y * height, 4, 0, Math.PI * 2);
+            const y = landmark.y * height;
 
-            ctx.fill();
-        });
+            context.beginPath();
+
+            context.arc(x, y, 5, 0, Math.PI * 2);
+
+            context.fill();
+        }
+    };
+
+    // =========================================================
+    // Stop Tracking
+    // =========================================================
+
+    const stopTracking = () => {
+        runningRef.current = false;
+
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+
+            animationFrameRef.current = null;
+        }
+
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+
+            streamRef.current = null;
+        }
+
+        if (videoRef.current) {
+            videoRef.current.pause();
+
+            videoRef.current.srcObject = null;
+        }
+
+        if (poseLandmarkerRef.current) {
+            poseLandmarkerRef.current.close();
+
+            poseLandmarkerRef.current = null;
+        }
+
+        feedbackRef.current?.reset();
+
+        if (onStop) {
+            onStop();
+        }
+    };
+
+    // =========================================================
+    // Reset Exercise
+    // =========================================================
+
+    const resetExercise = () => {
+        judgeRef.current?.reset();
+
+        feedbackRef.current?.reset();
+
+        setResult(null);
+
+        lastVideoTimeRef.current = -1;
     };
 
     // =========================================================
@@ -324,45 +469,73 @@ const PoseTracker = ({ exercise }) => {
 
     return (
         <div className="pose-tracker">
-            <div className="camera-container">
-                <video ref={videoRef} autoPlay muted playsInline />
+            {error && <div className="pose-error">{error}</div>}
 
-                <canvas ref={canvasRef} />
-            </div>
-
-            {error && <div className="tracker-error">{error}</div>}
-
-            {!isReady && !error && (
-                <div className="tracker-loading">Initializing camera...</div>
+            {isLoading && (
+                <div className="pose-loading">
+                    Initializing pose tracking...
+                </div>
             )}
 
-            {isReady && (
-                <div className="exercise-stats">
-                    <div className="stat">
-                        <span>Reps</span>
-                        <strong>{result.reps}</strong>
-                    </div>
+            <div className="pose-video-container">
+                <video
+                    ref={videoRef}
+                    className="pose-video"
+                    autoPlay
+                    muted
+                    playsInline
+                />
 
-                    <div className="stat">
-                        <span>Progress</span>
-                        <strong>{result.progress}%</strong>
-                    </div>
+                <canvas ref={canvasRef} className="pose-canvas" />
 
-                    <div className="stat">
-                        <span>Score</span>
-                        <strong>{result.avgScore}</strong>
-                    </div>
+                {!cameraReady && !isLoading && !error && (
+                    <div className="pose-overlay">Starting camera...</div>
+                )}
+            </div>
 
-                    <div className="stat">
+            {result && (
+                <div className="pose-stats">
+                    <div className="pose-stat">
                         <span>Phase</span>
-                        <strong>{result.state}</strong>
+
+                        <strong>{result.phase || "RESTING"}</strong>
+                    </div>
+
+                    <div className="pose-stat">
+                        <span>Reps</span>
+
+                        <strong>{result.reps ?? 0}</strong>
+                    </div>
+
+                    <div className="pose-stat">
+                        <span>Progress</span>
+
+                        <strong>{Math.round(result.progress ?? 0)}%</strong>
+                    </div>
+
+                    <div className="pose-stat">
+                        <span>Score</span>
+
+                        <strong>{Math.round(result.score ?? 0)}</strong>
                     </div>
                 </div>
             )}
 
-            {isReady && <div className="feedback">{result.feedback}</div>}
+            {result?.feedback && (
+                <div className="pose-feedback">{result.feedback}</div>
+            )}
+
+            <div className="pose-controls">
+                <button type="button" onClick={resetExercise}>
+                    Reset
+                </button>
+
+                <button type="button" onClick={stopTracking}>
+                    Stop Camera
+                </button>
+            </div>
         </div>
     );
-};
+}
 
 export default PoseTracker;
