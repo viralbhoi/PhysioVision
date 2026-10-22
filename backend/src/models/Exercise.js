@@ -13,9 +13,54 @@ const exerciseSchema = new mongoose.Schema(
             default: "",
         },
 
+        // PHYSIOTHERAPY = existing rehab exercise
+        // YOGA = yoga exercise
+        category: {
+            type: String,
+            enum: ["PHYSIOTHERAPY", "YOGA"],
+            default: "PHYSIOTHERAPY",
+            index: true,
+        },
+
+        // DYNAMIC = movement / repetition tracking
+        // STATIC = hold a reference pose
+        trackingMode: {
+            type: String,
+            enum: ["DYNAMIC", "STATIC"],
+            default: "DYNAMIC",
+        },
+
         referenceVideo: {
             type: String,
             default: null,
+        },
+
+        referenceVideoPublicId: {
+            type: String,
+            default: null,
+        },
+
+        referenceImage: {
+            type: String,
+            default: null,
+        },
+
+        referenceImagePublicId: {
+            type: String,
+            default: null,
+        },
+
+        targetHoldSeconds: {
+            type: Number,
+            min: 1,
+            default: null,
+        },
+
+        matchThreshold: {
+            type: Number,
+            min: 1,
+            max: 100,
+            default: 75,
         },
 
         configuration: {
@@ -37,6 +82,12 @@ const exerciseSchema = new mongoose.Schema(
             goldenTrajectory: {
                 type: [mongoose.Schema.Types.Mixed],
                 default: [],
+            },
+
+            // Used by static yoga pose matching.
+            referencePose: {
+                type: mongoose.Schema.Types.Mixed,
+                default: null,
             },
         },
 

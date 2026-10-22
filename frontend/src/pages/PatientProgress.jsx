@@ -1,22 +1,17 @@
 import { useEffect, useState } from "react";
-
 import { getPatientProgress, getPatientSessions } from "../services/api";
-
-import "./PatientProgress.css";
 
 function PatientProgress({ patient, onBack }) {
     const [progress, setProgress] = useState([]);
-
     const [sessions, setSessions] = useState([]);
-
     const [loading, setLoading] = useState(true);
-
     const [error, setError] = useState("");
-
     const [selectedExercise, setSelectedExercise] = useState("ALL");
 
     useEffect(() => {
-        loadProgress();
+        if (patient?._id) {
+            loadProgress();
+        }
     }, [patient?._id]);
 
     const loadProgress = async () => {
@@ -30,11 +25,9 @@ function PatientProgress({ patient, onBack }) {
             ]);
 
             setProgress(progressResponse.progress || []);
-
             setSessions(sessionsResponse.sessions || []);
         } catch (err) {
             console.error("Unable to load patient progress:", err);
-
             setError(err.message || "Unable to load patient progress.");
         } finally {
             setLoading(false);
@@ -43,28 +36,67 @@ function PatientProgress({ patient, onBack }) {
 
     if (loading) {
         return (
-            <div className="patient-progress">
-                <p>Loading patient progress...</p>
+            <div className="flex min-h-125 items-center justify-center">
+                <div className="flex flex-col items-center">
+                    <div className="h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+
+                    <p className="mt-4 text-sm font-medium text-slate-500">
+                        Loading patient progress...
+                    </p>
+                </div>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="patient-progress">
-                <button type="button" onClick={onBack}>
-                    ← Back
+            <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+                <button
+                    type="button"
+                    onClick={onBack}
+                    className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-900"
+                >
+                    <span className="text-lg">←</span>
+                    Back to patients
                 </button>
 
-                <div className="progress-error">{error}</div>
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+                            <svg
+                                className="h-5 w-5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                            >
+                                <circle cx="12" cy="12" r="9" />
+                                <path
+                                    strokeLinecap="round"
+                                    d="M12 8v4M12 16h.01"
+                                />
+                            </svg>
+                        </div>
+
+                        <div>
+                            <h2 className="font-semibold text-red-900">
+                                Unable to load progress
+                            </h2>
+
+                            <p className="mt-1 text-sm text-red-700">{error}</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }
 
-    const exercises = progress.map((item) => ({
-        id: item.exercise?._id,
-        name: item.exercise?.name || "Exercise",
-    }));
+    const exercises = progress
+        .map((item) => ({
+            id: item.exercise?._id,
+            name: item.exercise?.name || "Exercise",
+        }))
+        .filter((exercise) => exercise.id);
 
     const filteredSessions =
         selectedExercise === "ALL"
@@ -73,210 +105,590 @@ function PatientProgress({ patient, onBack }) {
                   (session) => session.exercise?._id === selectedExercise,
               );
 
-    return (
-        <div className="patient-progress">
-            {/* ================================================= */}
-            {/* Header */}
-            {/* ================================================= */}
+    const totalSessions = progress.reduce(
+        (total, item) => total + Number(item.totalSessions || 0),
+        0,
+    );
 
-            <header className="progress-header">
-                <div>
+    const totalReps = progress.reduce(
+        (total, item) => total + Number(item.totalReps || 0),
+        0,
+    );
+
+    const averageAccuracy =
+        progress.length > 0
+            ? Math.round(
+                  progress.reduce(
+                      (total, item) =>
+                          total + Number(item.averageAccuracy || 0),
+                      0,
+                  ) / progress.length,
+              )
+            : 0;
+
+    return (
+        <div className="min-h-full bg-slate-50">
+            <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+                {/* ================================================= */}
+                {/* Header */}
+                {/* ================================================= */}
+
+                <header className="mb-8">
                     <button
                         type="button"
                         onClick={onBack}
-                        className="back-button"
+                        className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-900"
                     >
-                        ← Back
+                        <span className="text-lg">←</span>
+                        Back to patients
                     </button>
 
-                    <h1>Patient Progress</h1>
+                    <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-base font-semibold text-blue-700">
+                                    {getInitial(
+                                        patient?.user?.name ||
+                                            patient?.name ||
+                                            "P",
+                                    )}
+                                </div>
 
-                    <p>{patient.user?.name || patient.name || "Patient"}</p>
+                                <div>
+                                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                                        Patient Progress
+                                    </h1>
 
-                    {patient.user?.email && <small>{patient.user.email}</small>}
-                </div>
-            </header>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        {patient?.user?.name ||
+                                            patient?.name ||
+                                            "Patient"}
+                                    </p>
 
-            {/* ================================================= */}
-            {/* Progress Cards */}
-            {/* ================================================= */}
+                                    {patient?.user?.email && (
+                                        <p className="mt-0.5 text-xs text-slate-400">
+                                            {patient.user.email}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
 
-            {progress.length === 0 ? (
-                <div className="empty-progress">No completed sessions yet.</div>
-            ) : (
-                <section>
-                    <h2>Exercise Progress</h2>
-
-                    <div className="progress-grid">
-                        {progress.map((item) => (
-                            <ProgressCard key={item._id} progress={item} />
-                        ))}
+                        <button
+                            type="button"
+                            onClick={loadProgress}
+                            className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 md:self-auto"
+                        >
+                            <svg
+                                className="h-4 w-4"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M20 11a8.1 8.1 0 0 0-14.8-4.5L4 8"
+                                />
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M4 4v4h4"
+                                />
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M4 13a8.1 8.1 0 0 0 14.8 4.5L20 16"
+                                />
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M20 20v-4h-4"
+                                />
+                            </svg>
+                            Refresh
+                        </button>
                     </div>
+                </header>
+
+                {/* ================================================= */}
+                {/* Overview */}
+                {/* ================================================= */}
+
+                <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <OverviewCard
+                        label="Total Sessions"
+                        value={totalSessions}
+                        description="Completed sessions"
+                        icon="sessions"
+                    />
+
+                    <OverviewCard
+                        label="Total Reps"
+                        value={totalReps}
+                        description="Across all exercises"
+                        icon="reps"
+                    />
+
+                    <OverviewCard
+                        label="Average Accuracy"
+                        value={`${averageAccuracy}%`}
+                        description="Across exercises"
+                        icon="accuracy"
+                    />
                 </section>
-            )}
 
-            {/* ================================================= */}
-            {/* Session History */}
-            {/* ================================================= */}
+                {/* ================================================= */}
+                {/* Exercise Progress */}
+                {/* ================================================= */}
 
-            <section className="session-history">
-                <div className="history-header">
-                    <h2>Session History</h2>
+                <section className="mb-8">
+                    <div className="mb-4">
+                        <h2 className="text-lg font-semibold text-slate-900">
+                            Exercise Progress
+                        </h2>
 
-                    <select
-                        value={selectedExercise}
-                        onChange={(event) =>
-                            setSelectedExercise(event.target.value)
-                        }
-                    >
-                        <option value="ALL">All Exercises</option>
-
-                        {exercises.map((exercise) => (
-                            <option key={exercise.id} value={exercise.id}>
-                                {exercise.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {filteredSessions.length === 0 ? (
-                    <div className="empty-progress">No sessions found.</div>
-                ) : (
-                    <div className="session-list">
-                        {filteredSessions.map((session) => (
-                            <SessionRow key={session._id} session={session} />
-                        ))}
+                        <p className="mt-1 text-sm text-slate-500">
+                            Performance trends across assigned exercises.
+                        </p>
                     </div>
-                )}
-            </section>
+
+                    {progress.length === 0 ? (
+                        <EmptyState
+                            title="No completed sessions yet"
+                            description="Progress will appear here once the patient completes an exercise session."
+                        />
+                    ) : (
+                        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                            {progress.map((item) => (
+                                <ProgressCard key={item._id} progress={item} />
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                {/* ================================================= */}
+                {/* Session History */}
+                {/* ================================================= */}
+
+                <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:p-6 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900">
+                                Session History
+                            </h2>
+
+                            <p className="mt-1 text-sm text-slate-500">
+                                Review completed exercise sessions.
+                            </p>
+                        </div>
+
+                        <div className="relative">
+                            <select
+                                value={selectedExercise}
+                                onChange={(event) =>
+                                    setSelectedExercise(event.target.value)
+                                }
+                                className="min-w-47.5 appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 pr-10 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                            >
+                                <option value="ALL">All Exercises</option>
+
+                                {exercises.map((exercise) => (
+                                    <option
+                                        key={exercise.id}
+                                        value={exercise.id}
+                                    >
+                                        {exercise.name}
+                                    </option>
+                                ))}
+                            </select>
+
+                            <svg
+                                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="m6 9 6 6 6-6"
+                                />
+                            </svg>
+                        </div>
+                    </div>
+
+                    {filteredSessions.length === 0 ? (
+                        <div className="p-8">
+                            <EmptyState
+                                title="No sessions found"
+                                description={
+                                    selectedExercise === "ALL"
+                                        ? "The patient has not completed any sessions yet."
+                                        : "No completed sessions exist for this exercise."
+                                }
+                                compact
+                            />
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <div className="min-w-162.5">
+                                {/* Table header */}
+                                <div className="grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-slate-100 bg-slate-50 px-6 py-3">
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                        Exercise
+                                    </span>
+
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                        Reps
+                                    </span>
+
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                        Score
+                                    </span>
+
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                        Duration
+                                    </span>
+                                </div>
+
+                                {filteredSessions.map((session) => (
+                                    <SessionRow
+                                        key={session._id}
+                                        session={session}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </section>
+            </div>
         </div>
     );
 }
 
-// =============================================================
-// Progress Card
-// =============================================================
+/* ============================================================= */
+/* Overview Card */
+/* ============================================================= */
+
+function OverviewCard({ label, value, description, icon }) {
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+                <div>
+                    <p className="text-sm font-medium text-slate-500">
+                        {label}
+                    </p>
+
+                    <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                        {value}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">{description}</p>
+                </div>
+
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    {icon === "sessions" && (
+                        <svg
+                            className="h-5 w-5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                        >
+                            <rect x="4" y="5" width="16" height="15" rx="2" />
+                            <path
+                                strokeLinecap="round"
+                                d="M8 3v4M16 3v4M4 10h16"
+                            />
+                        </svg>
+                    )}
+
+                    {icon === "reps" && (
+                        <svg
+                            className="h-5 w-5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M6 12h12M8 8v8M16 8v8"
+                            />
+                            <path strokeLinecap="round" d="M4 10v4M20 10v4" />
+                        </svg>
+                    )}
+
+                    {icon === "accuracy" && (
+                        <svg
+                            className="h-5 w-5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M4 19V5M4 19h16"
+                            />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m7 15 4-4 3 2 5-6"
+                            />
+                        </svg>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ============================================================= */
+/* Progress Card */
+/* ============================================================= */
 
 function ProgressCard({ progress }) {
     const accuracy = Math.round(progress.averageAccuracy || 0);
-
     const lastAccuracy = Math.round(progress.lastAccuracy || 0);
 
-    return (
-        <div className="progress-card">
-            <div className="progress-card-header">
-                <div>
-                    <h3>{progress.exercise?.name || "Exercise"}</h3>
+    const safeAccuracy = Math.min(100, Math.max(0, accuracy));
 
-                    <span>{progress.totalSessions} sessions</span>
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <h3 className="truncate text-base font-semibold text-slate-900">
+                        {progress.exercise?.name || "Exercise"}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-400">
+                        {progress.totalSessions || 0}{" "}
+                        {progress.totalSessions === 1 ? "session" : "sessions"}
+                    </p>
                 </div>
 
                 <TrendBadge trend={progress.trend} />
             </div>
 
-            <div className="accuracy-display">
-                <strong>{accuracy}</strong>
-
-                <span>average accuracy</span>
-            </div>
-
-            <div className="progress-card-stats">
+            <div className="mt-6 flex items-end justify-between">
                 <div>
-                    <span>Total Reps</span>
+                    <div className="flex items-baseline gap-1">
+                        <strong className="text-4xl font-semibold tracking-tight text-slate-900">
+                            {accuracy}
+                        </strong>
 
-                    <strong>{progress.totalReps}</strong>
+                        <span className="text-lg font-medium text-slate-400">
+                            %
+                        </span>
+                    </div>
+
+                    <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Average accuracy
+                    </p>
                 </div>
 
-                <div>
-                    <span>Latest</span>
+                <div className="text-right">
+                    <p className="text-xs font-medium text-slate-400">Latest</p>
 
-                    <strong>{lastAccuracy}</strong>
+                    <p className="mt-1 text-lg font-semibold text-slate-800">
+                        {lastAccuracy}%
+                    </p>
                 </div>
             </div>
 
-            <div className="accuracy-bar">
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
                 <div
+                    className="h-full rounded-full bg-blue-600 transition-all"
                     style={{
-                        width: `${Math.min(100, accuracy)}%`,
+                        width: `${safeAccuracy}%`,
                     }}
                 />
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 divide-x divide-slate-100 border-t border-slate-100 pt-4">
+                <div>
+                    <p className="text-xs text-slate-400">Total Reps</p>
+
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {progress.totalReps || 0}
+                    </p>
+                </div>
+
+                <div className="pl-5">
+                    <p className="text-xs text-slate-400">Last Session</p>
+
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {progress.lastSessionAt
+                            ? formatDate(progress.lastSessionAt)
+                            : "—"}
+                    </p>
+                </div>
             </div>
         </div>
     );
 }
 
-// =============================================================
-// Trend Badge
-// =============================================================
+/* ============================================================= */
+/* Trend Badge */
+/* ============================================================= */
 
 function TrendBadge({ trend }) {
-    const label =
-        trend === "IMPROVING"
-            ? "Improving"
-            : trend === "DECLINING"
-              ? "Declining"
-              : "Stable";
+    const normalizedTrend = String(trend || "STABLE").toUpperCase();
+
+    const config = {
+        IMPROVING: {
+            label: "Improving",
+            className: "bg-emerald-50 text-emerald-700",
+            icon: "↑",
+        },
+        DECLINING: {
+            label: "Declining",
+            className: "bg-red-50 text-red-700",
+            icon: "↓",
+        },
+        STABLE: {
+            label: "Stable",
+            className: "bg-slate-100 text-slate-600",
+            icon: "→",
+        },
+    };
+
+    const current = config[normalizedTrend] || config.STABLE;
 
     return (
         <span
-            className={`trend-badge ${String(trend || "STABLE").toLowerCase()}`}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${current.className}`}
         >
-            {label}
+            <span>{current.icon}</span>
+            {current.label}
         </span>
     );
 }
 
-// =============================================================
-// Session Row
-// =============================================================
+/* ============================================================= */
+/* Session Row */
+/* ============================================================= */
 
 function SessionRow({ session }) {
     const score = Math.round(session.averageScore || 0);
 
-    const date = session.completedAt
-        ? new Date(session.completedAt).toLocaleDateString()
-        : "—";
+    const date = session.completedAt ? formatDate(session.completedAt) : "—";
 
     const duration = formatDuration(session.duration);
 
     return (
-        <div className="session-row">
-            <div>
-                <strong>{session.exercise?.name || "Exercise"}</strong>
+        <div className="grid grid-cols-[2fr_1fr_1fr_1fr] items-center border-b border-slate-100 px-6 py-4 last:border-b-0 hover:bg-slate-50/70">
+            <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-800">
+                    {session.exercise?.name || "Exercise"}
+                </p>
 
-                <span>{date}</span>
+                <p className="mt-0.5 text-xs text-slate-400">{date}</p>
             </div>
 
             <div>
-                <span>Reps</span>
-
-                <strong>{session.completedReps}</strong>
+                <span className="text-sm font-medium text-slate-700">
+                    {session.completedReps ?? 0}
+                </span>
             </div>
 
             <div>
-                <span>Score</span>
-
-                <strong>{score}</strong>
+                <span
+                    className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                        score >= 80
+                            ? "bg-emerald-50 text-emerald-700"
+                            : score >= 50
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-red-50 text-red-700"
+                    }`}
+                >
+                    {score}%
+                </span>
             </div>
 
             <div>
-                <span>Duration</span>
-
-                <strong>{duration}</strong>
+                <span className="text-sm font-medium text-slate-600">
+                    {duration}
+                </span>
             </div>
         </div>
     );
 }
 
-// =============================================================
-// Helpers
-// =============================================================
+/* ============================================================= */
+/* Empty State */
+/* ============================================================= */
+
+function EmptyState({ title, description, compact = false }) {
+    return (
+        <div
+            className={`rounded-2xl border border-dashed border-slate-200 bg-white text-center ${
+                compact ? "py-10" : "px-6 py-14"
+            }`}
+        >
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                <svg
+                    className="h-5 w-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 5h6M9 9h6M9 13h6M9 17h3"
+                    />
+                    <rect x="4" y="3" width="16" height="18" rx="2" />
+                </svg>
+            </div>
+
+            <h3 className="mt-4 text-sm font-semibold text-slate-800">
+                {title}
+            </h3>
+
+            <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-slate-400">
+                {description}
+            </p>
+        </div>
+    );
+}
+
+/* ============================================================= */
+/* Helpers */
+/* ============================================================= */
+
+function getInitial(name) {
+    return String(name || "P")
+        .trim()
+        .charAt(0)
+        .toUpperCase();
+}
+
+function formatDate(value) {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return "—";
+    }
+
+    return date.toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+    });
+}
 
 function formatDuration(seconds) {
     const value = Number(seconds) || 0;
 
     const minutes = Math.floor(value / 60);
-
     const remaining = value % 60;
 
     if (minutes === 0) {

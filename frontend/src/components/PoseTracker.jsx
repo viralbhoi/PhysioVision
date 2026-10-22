@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
 import PhysioGeometry from "../engine/geometry";
 import ROMJudge from "../engine/ROMJudge";
 import FeedbackEngine from "../engine/FeedbackEngine";
-
-import "./PoseTracker.css";
 
 const MODEL_URL =
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
@@ -35,9 +34,9 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
     const [cameraReady, setCameraReady] = useState(false);
     const [result, setResult] = useState(null);
 
-    // =========================================================
-    // Initialize ROM Judge
-    // =========================================================
+    /* ========================================================= */
+    /* Initialize ROM Judge */
+    /* ========================================================= */
 
     useEffect(() => {
         if (!exercise) {
@@ -58,9 +57,9 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         };
     }, [exercise]);
 
-    // =========================================================
-    // Initialize MediaPipe
-    // =========================================================
+    /* ========================================================= */
+    /* Initialize MediaPipe */
+    /* ========================================================= */
 
     useEffect(() => {
         let mounted = true;
@@ -85,9 +84,7 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                         numPoses: 1,
 
                         minPoseDetectionConfidence: 0.6,
-
                         minPosePresenceConfidence: 0.6,
-
                         minTrackingConfidence: 0.6,
                     },
                 );
@@ -123,14 +120,13 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
 
         return () => {
             mounted = false;
-
             stopTracking();
         };
     }, []);
 
-    // =========================================================
-    // Start Camera
-    // =========================================================
+    /* ========================================================= */
+    /* Start Camera */
+    /* ========================================================= */
 
     const startCamera = async () => {
         try {
@@ -145,11 +141,14 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                     width: {
                         ideal: VIDEO_WIDTH,
                     },
+
                     height: {
                         ideal: VIDEO_HEIGHT,
                     },
+
                     facingMode: "user",
                 },
+
                 audio: false,
             });
 
@@ -179,9 +178,9 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         }
     };
 
-    // =========================================================
-    // Main Video Loop
-    // =========================================================
+    /* ========================================================= */
+    /* Main Video Loop */
+    /* ========================================================= */
 
     const processVideoFrame = () => {
         if (!runningRef.current) {
@@ -189,7 +188,6 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         }
 
         const video = videoRef.current;
-
         const poseLandmarker = poseLandmarkerRef.current;
 
         if (
@@ -203,10 +201,6 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             return;
         }
 
-        /*
-         * MediaPipe requires an increasing
-         * timestamp for VIDEO mode.
-         */
         const currentTime = video.currentTime;
 
         if (currentTime !== lastVideoTimeRef.current) {
@@ -229,14 +223,13 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         animationFrameRef.current = requestAnimationFrame(processVideoFrame);
     };
 
-    // =========================================================
-    // Handle MediaPipe Result
-    // =========================================================
+    /* ========================================================= */
+    /* Handle MediaPipe Result */
+    /* ========================================================= */
 
     const handleDetection = (detection) => {
         if (!detection || !detection.landmarks?.length) {
             drawCanvas(null);
-
             return;
         }
 
@@ -244,16 +237,8 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
 
         const worldLandmarks = detection.worldLandmarks?.[0];
 
-        /*
-         * World landmarks are required
-         * for biomechanical calculations.
-         *
-         * 2D landmarks are only used
-         * for visualization.
-         */
         if (!worldLandmarks) {
             drawCanvas(landmarks);
-
             return;
         }
 
@@ -263,9 +248,9 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             return;
         }
 
-        // =====================================================
-        // Landmark → Joint Angles
-        // =====================================================
+        /* ----------------------------------------------------- */
+        /* Landmark → Joint Angles */
+        /* ----------------------------------------------------- */
 
         const angles = PhysioGeometry.getStandardAngles(worldLandmarks);
 
@@ -273,9 +258,9 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             return;
         }
 
-        // =====================================================
-        // ROM Judge
-        // =====================================================
+        /* ----------------------------------------------------- */
+        /* ROM Judge */
+        /* ----------------------------------------------------- */
 
         const judgeResult = judgeRef.current.processFrame(angles);
 
@@ -283,36 +268,35 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             return;
         }
 
-        // =====================================================
-        // Audio Feedback
-        // =====================================================
+        /* ----------------------------------------------------- */
+        /* Audio Feedback */
+        /* ----------------------------------------------------- */
 
         if (judgeResult.feedback && feedbackRef.current) {
             feedbackRef.current.speak(judgeResult.feedback);
         }
 
-        // =====================================================
-        // Update UI
-        // =====================================================
+        /* ----------------------------------------------------- */
+        /* Update UI */
+        /* ----------------------------------------------------- */
 
         setResult(judgeResult);
 
-        // =====================================================
-        // Send result to parent
-        // =====================================================
+        /* ----------------------------------------------------- */
+        /* Send result to parent */
+        /* ----------------------------------------------------- */
 
         if (onResult) {
             onResult(judgeResult);
         }
     };
 
-    // =========================================================
-    // Canvas Drawing
-    // =========================================================
+    /* ========================================================= */
+    /* Canvas Drawing */
+    /* ========================================================= */
 
     const drawCanvas = (landmarks) => {
         const canvas = canvasRef.current;
-
         const video = videoRef.current;
 
         if (!canvas || !video) {
@@ -341,9 +325,9 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         drawPose(context, landmarks, width, height);
     };
 
-    // =========================================================
-    // Skeleton Drawing
-    // =========================================================
+    /* ========================================================= */
+    /* Skeleton Drawing */
+    /* ========================================================= */
 
     const drawPose = (context, landmarks, width, height) => {
         const connections = [
@@ -371,10 +355,11 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         ];
 
         context.lineWidth = 4;
+        context.lineCap = "round";
+        context.lineJoin = "round";
 
         for (const [startIndex, endIndex] of connections) {
             const start = landmarks[startIndex];
-
             const end = landmarks[endIndex];
 
             if (!start || !end) {
@@ -400,20 +385,17 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             }
 
             const x = landmark.x * width;
-
             const y = landmark.y * height;
 
             context.beginPath();
-
             context.arc(x, y, 5, 0, Math.PI * 2);
-
             context.fill();
         }
     };
 
-    // =========================================================
-    // Stop Tracking
-    // =========================================================
+    /* ========================================================= */
+    /* Stop Tracking */
+    /* ========================================================= */
 
     const stopTracking = () => {
         runningRef.current = false;
@@ -432,30 +414,29 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
 
         if (videoRef.current) {
             videoRef.current.pause();
-
             videoRef.current.srcObject = null;
         }
 
         if (poseLandmarkerRef.current) {
             poseLandmarkerRef.current.close();
-
             poseLandmarkerRef.current = null;
         }
 
         feedbackRef.current?.reset();
+
+        setCameraReady(false);
 
         if (onStop) {
             onStop();
         }
     };
 
-    // =========================================================
-    // Reset Exercise
-    // =========================================================
+    /* ========================================================= */
+    /* Reset Exercise */
+    /* ========================================================= */
 
     const resetExercise = () => {
         judgeRef.current?.reset();
-
         feedbackRef.current?.reset();
 
         setResult(null);
@@ -463,79 +444,226 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         lastVideoTimeRef.current = -1;
     };
 
-    // =========================================================
-    // Render
-    // =========================================================
+    /* ========================================================= */
+    /* Render */
+    /* ========================================================= */
 
     return (
-        <div className="pose-tracker">
-            {error && <div className="pose-error">{error}</div>}
+        <div className="w-full space-y-4">
+            {/* ================================================= */}
+            {/* Error */}
+            {/* ================================================= */}
 
-            {isLoading && (
-                <div className="pose-loading">
-                    Initializing pose tracking...
+            {error && (
+                <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+                        <svg
+                            className="h-4 w-4"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                        >
+                            <circle cx="12" cy="12" r="9" />
+
+                            <path strokeLinecap="round" d="M12 8v4M12 16h.01" />
+                        </svg>
+                    </div>
+
+                    <div>
+                        <p className="text-sm font-semibold text-red-800">
+                            Pose tracking error
+                        </p>
+
+                        <p className="mt-0.5 text-sm text-red-700">{error}</p>
+                    </div>
                 </div>
             )}
 
-            <div className="pose-video-container">
-                <video
-                    ref={videoRef}
-                    className="pose-video"
-                    autoPlay
-                    muted
-                    playsInline
-                />
+            {/* ================================================= */}
+            {/* Camera */}
+            {/* ================================================= */}
 
-                <canvas ref={canvasRef} className="pose-canvas" />
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-lg">
+                <div className="relative aspect-video w-full overflow-hidden">
+                    <video
+                        ref={videoRef}
+                        className="absolute inset-0 h-full w-full object-cover"
+                        autoPlay
+                        muted
+                        playsInline
+                    />
 
-                {!cameraReady && !isLoading && !error && (
-                    <div className="pose-overlay">Starting camera...</div>
-                )}
-            </div>
+                    <canvas
+                        ref={canvasRef}
+                        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                    />
+
+                    {/* Loading */}
+                    {isLoading && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-slate-700 border-t-blue-500">
+                                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                            </div>
+
+                            <p className="mt-4 text-sm font-medium text-white">
+                                Initializing pose tracking...
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-400">
+                                Loading the movement analysis engine
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Camera starting */}
+                    {!cameraReady && !isLoading && !error && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80">
+                            <div className="rounded-xl bg-white/10 px-4 py-3 text-sm font-medium text-white backdrop-blur">
+                                Starting camera...
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Live indicator */}
+                    {cameraReady && !isLoading && (
+                        <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-slate-950/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+                            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+                            Live
+                        </div>
+                    )}
+
+                    {/* Exercise name */}
+                    {exercise?.name && (
+                        <div className="absolute right-4 top-4 max-w-[60%] rounded-lg bg-slate-950/70 px-3 py-1.5 text-xs font-medium text-white backdrop-blur">
+                            {exercise.name}
+                        </div>
+                    )}
+
+                    {/* Feedback overlay */}
+                    {result?.feedback && (
+                        <div className="absolute bottom-4 left-1/2 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2">
+                            <div className="rounded-xl border border-white/10 bg-slate-950/80 px-5 py-3.5 text-center text-sm font-semibold text-white shadow-lg backdrop-blur">
+                                {result.feedback}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </section>
+
+            {/* ================================================= */}
+            {/* Live Stats */}
+            {/* ================================================= */}
 
             {result && (
-                <div className="pose-stats">
-                    <div className="pose-stat">
-                        <span>Phase</span>
+                <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <LiveStat label="Phase" value={formatPhase(result.phase)} />
 
-                        <strong>{result.phase || "RESTING"}</strong>
-                    </div>
+                    <LiveStat label="Reps" value={result.reps ?? 0} />
 
-                    <div className="pose-stat">
-                        <span>Reps</span>
+                    <LiveStat
+                        label="Progress"
+                        value={`${Math.round(result.progress ?? 0)}%`}
+                    />
 
-                        <strong>{result.reps ?? 0}</strong>
-                    </div>
+                    <LiveStat
+                        label="Score"
+                        value={Math.round(result.score ?? 0)}
+                        score
+                    />
+                </section>
+            )}
 
-                    <div className="pose-stat">
-                        <span>Progress</span>
+            {/* ================================================= */}
+            {/* Controls */}
+            {/* ================================================= */}
 
-                        <strong>{Math.round(result.progress ?? 0)}%</strong>
-                    </div>
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                        Exercise controls
+                    </p>
 
-                    <div className="pose-stat">
-                        <span>Score</span>
-
-                        <strong>{Math.round(result.score ?? 0)}</strong>
-                    </div>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                        Reset your movement analysis or stop the camera.
+                    </p>
                 </div>
-            )}
 
-            {result?.feedback && (
-                <div className="pose-feedback">{result.feedback}</div>
-            )}
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={resetExercise}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                        Reset
+                    </button>
 
-            <div className="pose-controls">
-                <button type="button" onClick={resetExercise}>
-                    Reset
-                </button>
-
-                <button type="button" onClick={stopTracking}>
-                    Stop Camera
-                </button>
+                    <button
+                        type="button"
+                        onClick={stopTracking}
+                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                        Stop Camera
+                    </button>
+                </div>
             </div>
         </div>
     );
+}
+
+/* ============================================================= */
+/* Live Stat */
+/* ============================================================= */
+
+function LiveStat({ label, value, score = false }) {
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                {label}
+            </p>
+
+            <p
+                className={`mt-2 truncate text-xl font-semibold ${
+                    score ? getScoreTextClass(value) : "text-slate-900"
+                }`}
+            >
+                {value}
+            </p>
+        </div>
+    );
+}
+
+/* ============================================================= */
+/* Helpers */
+/* ============================================================= */
+
+function formatPhase(phase) {
+    if (!phase) {
+        return "RESTING";
+    }
+
+    return String(phase)
+        .toLowerCase()
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getScoreTextClass(score) {
+    const value = Number(score) || 0;
+
+    if (value >= 85) {
+        return "text-emerald-600";
+    }
+
+    if (value >= 70) {
+        return "text-blue-600";
+    }
+
+    if (value >= 50) {
+        return "text-amber-600";
+    }
+
+    return "text-red-600";
 }
 
 export default PoseTracker;
