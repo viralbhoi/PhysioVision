@@ -33,6 +33,13 @@ const PhysioDashboard = () => {
 
     const [showYogaCreator, setShowYogaCreator] = useState(false);
 
+    const scrollToSection = (sectionId) => {
+        document.getElementById(sectionId)?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+        });
+    };
+
     // =========================================================
     // Load Dashboard
     // =========================================================
@@ -304,7 +311,18 @@ const PhysioDashboard = () => {
 
                 <section className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-3">
                     {/* Patients */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => scrollToSection("patients-section")}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                scrollToSection("patients-section");
+                            }
+                        }}
+                        className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100"
+                    >
                         <div className="flex items-start justify-between">
                             <div>
                                 <p className="text-sm font-medium text-slate-500">
@@ -338,7 +356,18 @@ const PhysioDashboard = () => {
                     </div>
 
                     {/* Exercises */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => scrollToSection("exercises-section")}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                scrollToSection("exercises-section");
+                            }
+                        }}
+                        className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-violet-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-violet-100"
+                    >
                         <div className="flex items-start justify-between">
                             <div>
                                 <p className="text-sm font-medium text-slate-500">
@@ -370,7 +399,18 @@ const PhysioDashboard = () => {
                     </div>
 
                     {/* Workspace */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => scrollToSection("patients-section")}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                scrollToSection("patients-section");
+                            }
+                        }}
+                        className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-emerald-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-100"
+                    >
                         <div className="flex items-start justify-between">
                             <div>
                                 <p className="text-sm font-medium text-slate-500">
@@ -406,7 +446,7 @@ const PhysioDashboard = () => {
                     Patients
                 ================================================= */}
 
-                <section className="mb-10">
+                <section id="patients-section" className="mb-10">
                     <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">
@@ -547,7 +587,7 @@ const PhysioDashboard = () => {
                     Exercise Library
                 ================================================= */}
 
-                <section className="mb-10">
+                <section id="exercises-section" className="mb-10">
                     <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">
@@ -564,21 +604,34 @@ const PhysioDashboard = () => {
                             </p>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={() => setCalibratingExercise(true)}
-                            className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-                        >
-                            + Create Exercise
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setCalibratingExercise(true)}
+                                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                            >
+                                + Create Exercise
+                            </button>
 
-                        <button
-                            type="button"
-                            onClick={() => setShowYogaCreator(true)}
-                            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-                        >
-                            Create Yoga Exercise
-                        </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowYogaCreator(true)}
+                                className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                            >
+                                + Create Yoga Exercise
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    window.location.href =
+                                        "/physio/generalized-sessions";
+                                }}
+                                className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 shadow-sm transition hover:bg-violet-100"
+                            >
+                                + Generalized Sessions
+                            </button>
+                        </div>
                     </div>
 
                     {exercises.length === 0 ? (

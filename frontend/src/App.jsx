@@ -6,6 +6,9 @@ import Login from "./pages/Login";
 import PatientDashboard from "./pages/PatientDashboard";
 import PhysioDashboard from "./pages/PhysioDashboard";
 import Register from "./pages/Register";
+import GeneralizedSessions from "./pages/GeneralizedSessions";
+import JoinGeneralizedSession from "./pages/JoinGeneralizedSession";
+import GeneralizedSessionExercise from "./pages/GeneralizedSessionExercise";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -37,7 +40,26 @@ function App() {
                         }
                     />
 
+                    <Route
+                        path="/physio/generalized-sessions"
+                        element={
+                            <ProtectedRoute role="PHYSIO">
+                                <GeneralizedSessions />
+                            </ProtectedRoute>
+                        }
+                    />
+
                     <Route path="*" element={<Login />} />
+
+                    <Route
+                        path="/join-session/:inviteCode"
+                        element={<JoinGeneralizedSession />}
+                    />
+
+                    <Route
+                        path="/generalized-session/:inviteCode/exercise"
+                        element={<GeneralizedSessionExercise />}
+                    />
                 </Routes>
             </BrowserRouter>
         </AuthProvider>

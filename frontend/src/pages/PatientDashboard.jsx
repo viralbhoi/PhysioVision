@@ -1,26 +1,51 @@
-import { useEffect, useState } from "react";
-import { getMyAssignments, getMyPhysiotherapist } from "../services/api";
+import { useCallback, useEffect, useState } from "react";
+
+import {
+    getMyAssignments,
+    getMyPhysiotherapist,
+    getMySessions,
+} from "../services/api";
 
 import ExerciseSession from "./ExerciseSession";
+import SessionDetailReport from "../components/SessionDetailReport";
 import ConnectPhysio from "../components/ConnectPhysio";
+
+const FILTERS = {
+    ALL: "ALL",
+    ACTIVE: "ACTIVE",
+    COMPLETED: "COMPLETED",
+};
 
 const PatientDashboard = () => {
     const [assignments, setAssignments] = useState([]);
     const [physiotherapist, setPhysiotherapist] = useState(null);
+    const [sessions, setSessions] = useState([]);
+
     const [selectedAssignment, setSelectedAssignment] = useState(null);
+    const [selectedSession, setSelectedSession] = useState(null);
+    const [assignmentFilter, setAssignmentFilter] = useState(FILTERS.ALL);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [historyError, setHistoryError] = useState("");
+    const [historyLoading, setHistoryLoading] = useState(true);
 
-    // =====================================================
-    // Load Dashboard
-    // =====================================================
+    const loadHistory = useCallback(async () => {
+        try {
+            setHistoryLoading(true);
+            setHistoryError("");
 
-    useEffect(() => {
-        loadDashboard();
+            const response = await getMySessions();
+            setSessions(response.sessions || []);
+        } catch (err) {
+            console.error("Unable to load session history:", err);
+            setHistoryError(err.message || "Unable to load session history.");
+        } finally {
+            setHistoryLoading(false);
+        }
     }, []);
 
-    const loadDashboard = async () => {
+    const loadDashboard = useCallback(async () => {
         try {
             setLoading(true);
             setError("");
@@ -31,41 +56,77 @@ const PatientDashboard = () => {
             ]);
 
             setAssignments(assignmentsData.assignments || []);
-
             setPhysiotherapist(physiotherapistData.physiotherapist || null);
         } catch (err) {
-            console.error(err);
-
+            console.error("Unable to load patient dashboard:", err);
             setError(err.message || "Unable to load your dashboard.");
         } finally {
             setLoading(false);
         }
+
+        // History is independent: a history API failure must not
+        // prevent the main dashboard from loading.
+        await loadHistory();
+    }, [loadHistory]);
+
+    useEffect(() => {
+        loadDashboard();
+    }, [loadDashboard]);
+
+    const activeAssignments = assignments.filter(
+        (assignment) =>
+            assignment.status === "ASSIGNED" ||
+            assignment.status === "IN_PROGRESS",
+    );
+
+    const completedAssignments = assignments.filter(
+        (assignment) => assignment.status === "COMPLETED",
+    );
+
+    const visibleAssignments =
+        assignmentFilter === FILTERS.ACTIVE
+            ? activeAssignments
+            : assignmentFilter === FILTERS.COMPLETED
+              ? completedAssignments
+              : assignments;
+
+    const handleConnected = async () => {
+        await loadDashboard();
     };
 
-    // =====================================================
-    // Exercise Session
-    // =====================================================
+    const handleSessionBack = async () => {
+        setSelectedSession(null);
+        await loadHistory();
+    };
 
+    // Existing exercise tracking flow remains unchanged.
     if (selectedAssignment) {
         return (
             <ExerciseSession
                 assignment={selectedAssignment}
-                onBack={() => setSelectedAssignment(null)}
+                onBack={() => {
+                    setSelectedAssignment(null);
+                    loadDashboard();
+                }}
             />
         );
     }
 
-    // =====================================================
-    // Loading
-    // =====================================================
+    if (selectedSession) {
+        return (
+            <SessionDetailReport
+                session={selectedSession}
+                onBack={handleSessionBack}
+            />
+        );
+    }
 
     if (loading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-slate-50">
-                <div className="flex flex-col items-center">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600" />
-
-                    <p className="mt-4 text-sm font-medium text-slate-600">
+                <div className="text-center">
+                    <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+                    <p className="mt-4 text-sm font-medium text-slate-500">
                         Loading your dashboard...
                     </p>
                 </div>
@@ -73,15 +134,11 @@ const PatientDashboard = () => {
         );
     }
 
-    // =====================================================
-    // Error
-    // =====================================================
-
     if (error) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-slate-50 px-5">
                 <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-xl font-bold text-red-600">
                         !
                     </div>
 
@@ -96,7 +153,7 @@ const PatientDashboard = () => {
                     <button
                         type="button"
                         onClick={loadDashboard}
-                        className="mt-6 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-200"
+                        className="mt-6 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
                     >
                         Try again
                     </button>
@@ -105,231 +162,125 @@ const PatientDashboard = () => {
         );
     }
 
-    // =====================================================
-    // Patient Connected
-    // =====================================================
-
-    const handleConnected = async () => {
-        await loadDashboard();
-    };
-
-    // =====================================================
-    // Dashboard
-    // =====================================================
-
-    const activeAssignments = assignments.filter(
-        (assignment) =>
-            assignment.status === "ASSIGNED" ||
-            assignment.status === "IN_PROGRESS",
-    );
-
-    const completedAssignments = assignments.filter(
-        (assignment) => assignment.status === "COMPLETED",
-    );
-
     return (
-        <div className="min-h-screen bg-slate-50">
-            {/* =================================================
-                Top Navigation
-            ================================================= */}
-
-            <header className="border-b border-slate-200 bg-white">
+        <div className="min-h-screen bg-slate-50 text-slate-900">
+            {/* Navigation */}
+            <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
                 <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
-                    {/* Brand */}
                     <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-sm font-bold text-white shadow-sm">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 font-bold text-white shadow-sm">
                             P
                         </div>
 
                         <div>
-                            <p className="text-sm font-semibold tracking-tight text-slate-900">
+                            <p className="font-semibold tracking-tight">
                                 PhysioVision
                             </p>
-
-                            <p className="hidden text-[11px] text-slate-400 sm:block">
+                            <p className="text-[11px] text-slate-400">
                                 Patient Portal
                             </p>
                         </div>
                     </div>
 
-                    {/* Right */}
                     <div className="flex items-center gap-3">
                         <button
                             type="button"
                             onClick={loadDashboard}
-                            className="hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 sm:block"
+                            className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                         >
-                            Refresh
+                            ↻ Refresh
                         </button>
 
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 font-semibold text-blue-700">
                             P
                         </div>
                     </div>
                 </div>
             </header>
 
-            {/* =================================================
-                Main
-            ================================================= */}
-
             <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:py-10">
-                {/* =================================================
-                    Welcome
-                ================================================= */}
-
+                {/* Welcome */}
                 <section className="mb-8">
-                    <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-                        <div>
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">
-                                Patient Portal
-                            </p>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">
+                        Patient Portal
+                    </p>
 
-                            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+                    <div className="mt-2 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                        <div>
+                            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
                                 My Dashboard
                             </h1>
-
                             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500 sm:text-base">
-                                Stay on top of your rehabilitation and complete
-                                your prescribed exercises.
+                                Manage your prescribed exercises, review
+                                previous sessions, and track your progress.
                             </p>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={loadDashboard}
-                            className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 sm:hidden"
-                        >
-                            ↻ Refresh
-                        </button>
-                    </div>
-                </section>
-
-                {/* =================================================
-                    Overview Stats
-                ================================================= */}
-
-                <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    {/* Assigned */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-slate-500">
-                                    Assigned Exercises
-                                </p>
-
-                                <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-                                    {assignments.length}
-                                </p>
-                            </div>
-
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                    className="h-5 w-5"
-                                >
-                                    <path d="M9 11l3 3L22 4" />
-                                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
-                                </svg>
-                            </div>
-                        </div>
-
-                        <p className="mt-3 text-xs text-slate-400">
-                            {activeAssignments.length} requiring attention
-                        </p>
-                    </div>
-
-                    {/* Active */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-slate-500">
-                                    Active
-                                </p>
-
-                                <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-                                    {activeAssignments.length}
-                                </p>
-                            </div>
-
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                                <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                            </div>
-                        </div>
-
-                        <p className="mt-3 text-xs text-slate-400">
-                            Exercises ready to perform
-                        </p>
-                    </div>
-
-                    {/* Completed */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-slate-500">
-                                    Completed
-                                </p>
-
-                                <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-                                    {completedAssignments.length}
-                                </p>
-                            </div>
-
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                    className="h-5 w-5"
-                                >
-                                    <path d="M5 12l4 4L19 6" />
-                                </svg>
-                            </div>
-                        </div>
-
-                        <p className="mt-3 text-xs text-slate-400">
-                            Keep up the consistency
+                        <p className="text-sm text-slate-500">
+                            {new Date().toLocaleDateString(undefined, {
+                                weekday: "long",
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                            })}
                         </p>
                     </div>
                 </section>
 
-                {/* =================================================
-                    Physiotherapist
-                ================================================= */}
+                {/* Functional overview cards */}
+                <section className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <OverviewCard
+                        title="Assigned Exercises"
+                        value={assignments.length}
+                        description="View all prescribed exercises"
+                        icon="list"
+                        active={assignmentFilter === FILTERS.ALL}
+                        onClick={() => setAssignmentFilter(FILTERS.ALL)}
+                    />
 
+                    <OverviewCard
+                        title="Active"
+                        value={activeAssignments.length}
+                        description="Ready to continue"
+                        icon="activity"
+                        active={assignmentFilter === FILTERS.ACTIVE}
+                        onClick={() => setAssignmentFilter(FILTERS.ACTIVE)}
+                    />
+
+                    <OverviewCard
+                        title="Completed"
+                        value={completedAssignments.length}
+                        description="Review completed prescriptions"
+                        icon="check"
+                        active={assignmentFilter === FILTERS.COMPLETED}
+                        onClick={() => setAssignmentFilter(FILTERS.COMPLETED)}
+                    />
+                </section>
+
+                {/* Physiotherapist */}
                 <section className="mb-10">
-                    <div className="mb-4">
-                        <h2 className="text-lg font-semibold text-slate-900">
-                            Your Physiotherapist
-                        </h2>
-
-                        <p className="mt-1 text-sm text-slate-500">
-                            Your rehabilitation plan is managed by your
-                            physiotherapist.
-                        </p>
-                    </div>
+                    <SectionHeading
+                        eyebrow="Your care team"
+                        title="Your Physiotherapist"
+                        description="Your rehabilitation plan is managed by your physiotherapist."
+                    />
 
                     {physiotherapist ? (
-                        <div className="flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                        <div className="flex flex-col justify-between gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:p-6">
                             <div className="flex items-center gap-4">
-                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-50 text-base font-semibold text-blue-700">
+                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-lg font-bold text-blue-700">
                                     {getInitial(physiotherapist?.user?.name)}
                                 </div>
 
                                 <div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <h3 className="font-semibold text-slate-900">
+                                        <h3 className="font-semibold">
                                             {physiotherapist?.user?.name ||
                                                 "Physiotherapist"}
                                         </h3>
 
-                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                            Connected
+                                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                                            ● Connected
                                         </span>
                                     </div>
 
@@ -342,11 +293,10 @@ const PatientDashboard = () => {
                             </div>
 
                             <div className="rounded-xl bg-slate-50 px-4 py-3">
-                                <p className="text-xs font-medium text-slate-400">
-                                    Care provider
+                                <p className="text-xs text-slate-400">
+                                    Care status
                                 </p>
-
-                                <p className="mt-0.5 text-sm font-medium text-slate-700">
+                                <p className="mt-1 text-sm font-semibold">
                                     Rehabilitation plan active
                                 </p>
                             </div>
@@ -356,152 +306,128 @@ const PatientDashboard = () => {
                     )}
                 </section>
 
-                {/* =================================================
-                    Exercises
-                ================================================= */}
+                {/* Exercises */}
+                <section className="mb-10">
+                    <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                        <SectionHeading
+                            eyebrow="Rehabilitation"
+                            title="My Exercises"
+                            description="Select an exercise to begin or continue your prescribed routine."
+                        />
 
-                <section>
-                    <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-                        <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">
-                                Rehabilitation
-                            </p>
-
-                            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
-                                My Exercises
-                            </h2>
-
-                            <p className="mt-1 text-sm text-slate-500">
-                                Exercises prescribed by your physiotherapist.
-                            </p>
+                        <div className="flex flex-wrap gap-2">
+                            {[
+                                { value: FILTERS.ALL, label: "All" },
+                                { value: FILTERS.ACTIVE, label: "Active" },
+                                {
+                                    value: FILTERS.COMPLETED,
+                                    label: "Completed",
+                                },
+                            ].map((filter) => (
+                                <button
+                                    key={filter.value}
+                                    type="button"
+                                    onClick={() =>
+                                        setAssignmentFilter(filter.value)
+                                    }
+                                    className={`rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+                                        assignmentFilter === filter.value
+                                            ? "bg-blue-600 text-white"
+                                            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                                    }`}
+                                >
+                                    {filter.label}
+                                </button>
+                            ))}
                         </div>
-
-                        <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
-                            {assignments.length}{" "}
-                            {assignments.length === 1
-                                ? "exercise"
-                                : "exercises"}
-                        </span>
                     </div>
 
-                    {/* Empty */}
-                    {assignments.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-                            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.7"
-                                    className="h-6 w-6"
-                                >
-                                    <path d="M12 6v12M6 12h12" />
-                                </svg>
-                            </div>
-
-                            <h3 className="mt-5 text-base font-semibold text-slate-900">
-                                No exercises assigned yet
-                            </h3>
-
-                            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                                Your prescribed exercises will appear here once
-                                your physiotherapist assigns them.
-                            </p>
-
-                            {!physiotherapist && (
-                                <p className="mt-3 text-xs font-medium text-amber-600">
-                                    Connect with a physiotherapist to get
-                                    started.
-                                </p>
-                            )}
-                        </div>
+                    {visibleAssignments.length === 0 ? (
+                        <EmptyState
+                            title={
+                                assignmentFilter === FILTERS.COMPLETED
+                                    ? "No completed exercises"
+                                    : assignmentFilter === FILTERS.ACTIVE
+                                      ? "No active exercises"
+                                      : "No exercises assigned yet"
+                            }
+                            description={
+                                assignmentFilter === FILTERS.COMPLETED
+                                    ? "Completed prescriptions will appear here."
+                                    : assignmentFilter === FILTERS.ACTIVE
+                                      ? "You currently have no assigned or in-progress exercises."
+                                      : "Your prescribed exercises will appear here once your physiotherapist assigns them."
+                            }
+                        />
                     ) : (
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                            {assignments.map((assignment) => {
+                            {visibleAssignments.map((assignment) => {
                                 const exercise = assignment.exercise;
+                                const completed =
+                                    assignment.status === "COMPLETED";
 
                                 return (
-                                    <div
+                                    <article
                                         key={assignment._id}
-                                        className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                                        className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
                                     >
                                         <div className="p-5 sm:p-6">
-                                            {/* Card top */}
                                             <div className="flex items-start justify-between gap-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-sm font-bold text-blue-700">
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-lg font-bold text-blue-700">
                                                         {getInitial(
                                                             exercise?.name,
                                                         )}
                                                     </div>
 
-                                                    <div>
-                                                        <h3 className="font-semibold text-slate-900">
+                                                    <div className="min-w-0">
+                                                        <h3 className="truncate font-semibold">
                                                             {exercise?.name ||
                                                                 "Exercise"}
                                                         </h3>
-
-                                                        <p className="mt-0.5 text-xs text-slate-400">
+                                                        <p className="mt-1 text-xs text-slate-400">
                                                             Rehabilitation
                                                             exercise
                                                         </p>
                                                     </div>
                                                 </div>
 
-                                                <span
-                                                    className={getStatusClass(
-                                                        assignment.status,
-                                                    )}
-                                                >
-                                                    {formatStatus(
-                                                        assignment.status,
-                                                    )}
-                                                </span>
+                                                <StatusBadge
+                                                    status={assignment.status}
+                                                />
                                             </div>
 
-                                            {/* Description */}
                                             <p className="mt-5 line-clamp-2 text-sm leading-6 text-slate-500">
                                                 {exercise?.description ||
                                                     "Follow the prescribed movement and complete your target repetitions."}
                                             </p>
 
-                                            {/* Metrics */}
                                             <div className="mt-5 grid grid-cols-2 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
-                                                <div className="border-r border-slate-200 px-4 py-3">
-                                                    <p className="text-xs text-slate-400">
-                                                        Sets
-                                                    </p>
-
-                                                    <p className="mt-1 text-lg font-semibold text-slate-900">
-                                                        {assignment.sets}
-                                                    </p>
-                                                </div>
-
-                                                <div className="px-4 py-3">
-                                                    <p className="text-xs text-slate-400">
-                                                        Target reps
-                                                    </p>
-
-                                                    <p className="mt-1 text-lg font-semibold text-slate-900">
-                                                        {assignment.targetReps}
-                                                    </p>
-                                                </div>
+                                                <Metric
+                                                    label="Sets"
+                                                    value={assignment.sets ?? 1}
+                                                />
+                                                <Metric
+                                                    label="Target reps"
+                                                    value={
+                                                        assignment.targetReps ??
+                                                        "—"
+                                                    }
+                                                    border={false}
+                                                />
                                             </div>
 
-                                            {/* Notes */}
                                             {assignment.notes && (
-                                                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
-                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600">
+                                                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                                                    <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
                                                         Physiotherapist note
                                                     </p>
-
-                                                    <p className="mt-1 text-sm leading-5 text-slate-600">
+                                                    <p className="mt-1 text-sm leading-6 text-slate-600">
                                                         {assignment.notes}
                                                     </p>
                                                 </div>
                                             )}
 
-                                            {/* Action */}
                                             <button
                                                 type="button"
                                                 onClick={() =>
@@ -509,76 +435,387 @@ const PatientDashboard = () => {
                                                         assignment,
                                                     )
                                                 }
-                                                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                                                className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-4 ${
+                                                    completed
+                                                        ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-100"
+                                                        : "bg-slate-900 text-white hover:bg-blue-600 focus:ring-blue-100"
+                                                }`}
                                             >
-                                                Start Exercise
-                                                <svg
-                                                    viewBox="0 0 24 24"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth="2"
-                                                    className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                                                >
-                                                    <path d="M5 12h14" />
-                                                    <path d="M13 6l6 6-6 6" />
-                                                </svg>
+                                                {completed
+                                                    ? "Open Exercise"
+                                                    : assignment.status ===
+                                                        "IN_PROGRESS"
+                                                      ? "Continue Exercise"
+                                                      : "Start Exercise"}
+                                                <span aria-hidden="true">
+                                                    →
+                                                </span>
                                             </button>
                                         </div>
-                                    </div>
+                                    </article>
                                 );
                             })}
                         </div>
                     )}
                 </section>
+
+                {/* Session history */}
+                <section
+                    id="session-history"
+                    className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                >
+                    <div className="flex flex-col justify-between gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:p-6">
+                        <SectionHeading
+                            eyebrow="Your activity"
+                            title="Session History"
+                            description="Select any session to open its detailed report."
+                        />
+
+                        <button
+                            type="button"
+                            onClick={loadHistory}
+                            disabled={historyLoading}
+                            className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                            {historyLoading ? "Loading..." : "↻ Refresh"}
+                        </button>
+                    </div>
+
+                    {historyError && (
+                        <div className="m-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                            <p>{historyError}</p>
+                            <button
+                                type="button"
+                                onClick={loadHistory}
+                                className="mt-2 font-semibold underline"
+                            >
+                                Try again
+                            </button>
+                        </div>
+                    )}
+
+                    {historyLoading && sessions.length === 0 ? (
+                        <div className="p-10 text-center text-sm text-slate-500">
+                            Loading session history...
+                        </div>
+                    ) : sessions.length === 0 ? (
+                        <div className="p-6 sm:p-8">
+                            <EmptyState
+                                title="No sessions recorded yet"
+                                description="After you complete an exercise, your session and performance report will appear here."
+                            />
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {sessions.map((session) => (
+                                <button
+                                    type="button"
+                                    key={session._id}
+                                    onClick={() => setSelectedSession(session)}
+                                    className="flex w-full flex-col justify-between gap-4 p-5 text-left transition hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 sm:flex-row sm:items-center sm:px-6"
+                                >
+                                    <div className="flex min-w-0 items-center gap-4">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                                            <HistoryIcon />
+                                        </div>
+
+                                        <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-900">
+                                                {session.exercise?.name ||
+                                                    "Exercise session"}
+                                            </p>
+                                            <p className="mt-1 text-xs text-slate-500">
+                                                {formatDateTime(
+                                                    session.completedAt ||
+                                                        session.createdAt,
+                                                )}
+                                            </p>
+                                            <p className="mt-2 text-sm text-slate-600">
+                                                {session.completedReps ?? 0}{" "}
+                                                reps
+                                                {" · "}
+                                                {formatDuration(
+                                                    session.duration,
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-4 sm:justify-end">
+                                        <div className="text-left sm:text-right">
+                                            <p className="text-xl font-bold text-slate-900">
+                                                {Math.round(
+                                                    Number(
+                                                        session.averageScore,
+                                                    ) || 0,
+                                                )}
+                                                <span className="ml-0.5 text-sm font-medium text-slate-400">
+                                                    /100
+                                                </span>
+                                            </p>
+                                            <p className="mt-1 text-xs text-slate-400">
+                                                Overall score
+                                            </p>
+                                        </div>
+
+                                        <span className="text-lg text-blue-600">
+                                            →
+                                        </span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="border-t border-slate-100 bg-slate-50 px-5 py-3 sm:px-6">
+                        <p className="text-xs text-slate-500">
+                            {sessions.length}{" "}
+                            {sessions.length === 1
+                                ? "session recorded"
+                                : "sessions recorded"}
+                        </p>
+                    </div>
+                </section>
             </main>
+
+            <footer className="border-t border-slate-200 bg-white">
+                <div className="mx-auto max-w-7xl px-5 py-5 text-center text-xs text-slate-400 sm:px-8">
+                    PhysioVision · Rehabilitation Progress
+                </div>
+            </footer>
         </div>
     );
 };
 
-// =============================================================
-// Helpers
-// =============================================================
+function OverviewCard({ title, value, description, icon, active, onClick }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-pressed={active}
+            className={`rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100 ${
+                active
+                    ? "border-blue-500 ring-2 ring-blue-100"
+                    : "border-slate-200 hover:border-slate-300"
+            }`}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-sm font-medium text-slate-500">
+                        {title}
+                    </p>
+                    <p className="mt-2 text-3xl font-bold tracking-tight">
+                        {value}
+                    </p>
+                </div>
 
-const getInitial = (name) => {
-    if (!name) {
-        return "?";
+                <div
+                    className={`flex h-11 w-11 items-center justify-center rounded-xl ${
+                        active
+                            ? "bg-blue-600 text-white"
+                            : "bg-blue-50 text-blue-600"
+                    }`}
+                >
+                    {icon === "list" ? (
+                        <ListIcon />
+                    ) : icon === "activity" ? (
+                        <ActivityIcon />
+                    ) : (
+                        <CheckIcon />
+                    )}
+                </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-400">{description}</p>
+                <span className="text-sm font-semibold text-blue-600">
+                    View →
+                </span>
+            </div>
+        </button>
+    );
+}
+
+function SectionHeading({ eyebrow, title, description }) {
+    return (
+        <div>
+            {eyebrow && (
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-600">
+                    {eyebrow}
+                </p>
+            )}
+            <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-900">
+                {title}
+            </h2>
+            {description && (
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                    {description}
+                </p>
+            )}
+        </div>
+    );
+}
+
+function Metric({ label, value, border = true }) {
+    return (
+        <div
+            className={`px-4 py-3 ${border ? "border-r border-slate-200" : ""}`}
+        >
+            <p className="text-xs text-slate-400">{label}</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+        </div>
+    );
+}
+
+function StatusBadge({ status }) {
+    const styles = {
+        ASSIGNED: "bg-slate-100 text-slate-600",
+        IN_PROGRESS: "bg-blue-50 text-blue-700",
+        COMPLETED: "bg-emerald-50 text-emerald-700",
+        PAUSED: "bg-amber-50 text-amber-700",
+    };
+
+    return (
+        <span
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                styles[status] || styles.ASSIGNED
+            }`}
+        >
+            {formatStatus(status)}
+        </span>
+    );
+}
+
+function EmptyState({ title, description }) {
+    return (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                <HistoryIcon />
+            </div>
+            <h3 className="mt-4 font-semibold text-slate-900">{title}</h3>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                {description}
+            </p>
+        </div>
+    );
+}
+
+function ListIcon() {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            className="h-5 w-5"
+        >
+            <path d="M9 6h11M9 12h11M9 18h11" />
+            <path d="M4 6h.01M4 12h.01M4 18h.01" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+function ActivityIcon() {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            className="h-5 w-5"
+        >
+            <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 12h4l3-8 4 16 3-8h4"
+            />
+        </svg>
+    );
+}
+
+function CheckIcon() {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            className="h-5 w-5"
+        >
+            <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m5 12 4 4L19 6"
+            />
+        </svg>
+    );
+}
+
+function HistoryIcon() {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            className="h-5 w-5"
+        >
+            <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 12a9 9 0 1 0 3-6.7L3 8"
+            />
+            <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 3v5h5m4-1v5l3 2"
+            />
+        </svg>
+    );
+}
+
+function getInitial(name) {
+    return String(name || "?")
+        .trim()
+        .charAt(0)
+        .toUpperCase();
+}
+
+function formatStatus(status) {
+    const labels = {
+        ASSIGNED: "Assigned",
+        IN_PROGRESS: "In progress",
+        COMPLETED: "Completed",
+        PAUSED: "Paused",
+    };
+
+    return labels[status] || "Assigned";
+}
+
+function formatDuration(value) {
+    const seconds = Math.max(0, Number(value) || 0);
+    const minutes = Math.floor(seconds / 60);
+    const remaining = Math.floor(seconds % 60);
+
+    return minutes > 0 ? `${minutes}m ${remaining}s` : `${remaining}s`;
+}
+
+function formatDateTime(value) {
+    if (!value) return "Date not recorded";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return "Date not recorded";
     }
 
-    return name.trim().charAt(0).toUpperCase();
-};
-
-const formatStatus = (status) => {
-    switch (status) {
-        case "IN_PROGRESS":
-            return "In progress";
-
-        case "COMPLETED":
-            return "Completed";
-
-        case "PAUSED":
-            return "Paused";
-
-        case "ASSIGNED":
-        default:
-            return "Assigned";
-    }
-};
-
-const getStatusClass = (status) => {
-    switch (status) {
-        case "IN_PROGRESS":
-            return "inline-flex shrink-0 items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700";
-
-        case "COMPLETED":
-            return "inline-flex shrink-0 items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700";
-
-        case "PAUSED":
-            return "inline-flex shrink-0 items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700";
-
-        case "ASSIGNED":
-        default:
-            return "inline-flex shrink-0 items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600";
-    }
-};
+    return date.toLocaleString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
 
 export default PatientDashboard;

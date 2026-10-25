@@ -10,7 +10,7 @@ const WASM_URL =
 const MODEL_URL =
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 
-const REQUIRED_VISIBILITY = 0.6;
+const REQUIRED_VISIBILITY = 0.5;
 const DEFAULT_THRESHOLD = 75;
 
 function clamp(value, min, max) {
@@ -30,30 +30,37 @@ function angleDifference(a, b) {
     return Math.min(difference, 360 - difference);
 }
 
-function calculateAngleScore(referenceAngles, currentAngles) {
-    if (
-        !referenceAngles ||
-        !currentAngles ||
-        typeof referenceAngles !== "object"
-    ) {
-        return null;
+function normalizeAngles(angles) {
+    if (Array.isArray(angles)) {
+        return Object.fromEntries(
+            angles
+                .filter(
+                    (item) => item?.name && Number.isFinite(Number(item.value)),
+                )
+                .map((item) => [item.name, Number(item.value)]),
+        );
     }
 
-    const keys = Object.keys(referenceAngles).filter(
-        (key) =>
-            Number.isFinite(Number(referenceAngles[key])) &&
-            Number.isFinite(Number(currentAngles[key])),
+    if (!angles || typeof angles !== "object") return {};
+
+    return Object.fromEntries(
+        Object.entries(angles)
+            .filter(([, value]) => Number.isFinite(Number(value)))
+            .map(([name, value]) => [name, Number(value)]),
+    );
+}
+
+function calculateAngleScore(referenceAngles, currentAngles) {
+    const reference = normalizeAngles(referenceAngles);
+    const current = normalizeAngles(currentAngles);
+    const commonNames = Object.keys(reference).filter((name) =>
+        Number.isFinite(current[name]),
     );
 
-    if (keys.length === 0) return null;
+    if (commonNames.length === 0) return null;
 
-    const scores = keys.map((key) => {
-        const difference = angleDifference(
-            referenceAngles[key],
-            currentAngles[key],
-        );
-
-        // A 45-degree difference receives a zero score.
+    const scores = commonNames.map((name) => {
+        const difference = angleDifference(reference[name], current[name]);
         return clamp(100 * (1 - difference / 45), 0, 100);
     });
 
@@ -189,6 +196,7 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
     });
 
     const [cameraReady, setCameraReady] = useState(false);
+    const [videoSize, setVideoSize] = useState({ width: 16, height: 9 });
     const [modelReady, setModelReady] = useState(false);
     const [poseResult, setPoseResult] = useState({
         score: 0,
@@ -369,6 +377,11 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
                 video.srcObject = stream;
                 await video.play();
 
+                // Match the overlay container to the camera's actual dimensions.
+                const width = video.videoWidth || 1280;
+                const height = video.videoHeight || 720;
+                setVideoSize({ width, height });
+
                 if (cancelled) return;
 
                 setCameraReady(true);
@@ -418,6 +431,7 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
         if (!cameraReady || !modelReady) return;
 
         let stopped = false;
+        lastVideoTimeRef.current = -1;
 
         const processFrame = () => {
             if (stopped) return;
@@ -448,11 +462,12 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
                 canvas.height = height;
             }
 
-            context.clearRect(0, 0, width, height);
-
+            // Do not clear the canvas between camera frames. Clearing on every
+            // requestAnimationFrame makes the skeleton flicker at camera FPS.
             try {
                 if (video.currentTime !== lastVideoTimeRef.current) {
                     lastVideoTimeRef.current = video.currentTime;
+                    context.clearRect(0, 0, width, height);
 
                     const result = landmarker.detectForVideo(
                         video,
@@ -631,19 +646,24 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
             )}
 
             <div className="grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1fr)_320px]">
-                <div className="relative min-h-64 bg-slate-950">
+                <div
+                    className="relative w-full overflow-hidden bg-slate-950"
+                    style={{
+                        aspectRatio: `${videoSize.width} / ${videoSize.height}`,
+                    }}
+                >
                     <video
                         ref={videoRef}
                         autoPlay
                         muted
                         playsInline
-                        className="block h-full max-h-155 min-h-64 w-full object-contain"
+                        className="absolute inset-0 h-full w-full object-fill"
                         style={{ transform: "scaleX(-1)" }}
                     />
 
                     <canvas
                         ref={canvasRef}
-                        className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                        className="pointer-events-none absolute inset-0 h-full w-full"
                         style={{ transform: "scaleX(-1)" }}
                     />
 

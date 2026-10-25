@@ -7,6 +7,7 @@ function PatientProgress({ patient, onBack }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [selectedExercise, setSelectedExercise] = useState("ALL");
+    const [selectedSession, setSelectedSession] = useState(null);
 
     useEffect(() => {
         if (patient?._id) {
@@ -33,6 +34,16 @@ function PatientProgress({ patient, onBack }) {
             setLoading(false);
         }
     };
+
+    if (selectedSession) {
+        return (
+            <SessionDetailReport
+                session={selectedSession}
+                patient={patient}
+                onBack={() => setSelectedSession(null)}
+            />
+        );
+    }
 
     if (loading) {
         return (
@@ -358,6 +369,9 @@ function PatientProgress({ patient, onBack }) {
                                     <SessionRow
                                         key={session._id}
                                         session={session}
+                                        onClick={() =>
+                                            setSelectedSession(session)
+                                        }
                                     />
                                 ))}
                             </div>
@@ -366,6 +380,168 @@ function PatientProgress({ patient, onBack }) {
                 </section>
             </div>
         </div>
+    );
+}
+
+/* ============================================================= */
+/* Detailed Session Report */
+/* ============================================================= */
+
+function SessionDetailReport({ session, patient, onBack }) {
+    const score = Math.round(Number(session.averageScore ?? 0));
+    const dateTime = (value) => {
+        if (!value) return "—";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime())
+            ? String(value)
+            : date.toLocaleString();
+    };
+    const readable = (value) => {
+        if (value === null || value === undefined || value === "") return "—";
+        if (typeof value === "object") return JSON.stringify(value, null, 2);
+        return String(value);
+    };
+    const fields = [
+        ["Session ID", session._id],
+        ["Status", session.status],
+        ["Exercise", session.exercise?.name],
+        ["Completed repetitions", session.completedReps],
+        ["Target repetitions", session.targetReps],
+        ["Average score", session.averageScore == null ? null : `${score}%`],
+        [
+            "Duration",
+            session.duration == null ? null : formatDuration(session.duration),
+        ],
+        ["Started at", dateTime(session.startedAt)],
+        ["Completed at", dateTime(session.completedAt)],
+        ["Created at", dateTime(session.createdAt)],
+        ["Last updated", dateTime(session.updatedAt)],
+        [
+            "Assignment ID",
+            typeof session.assignment === "object"
+                ? session.assignment?._id
+                : session.assignment,
+        ],
+        [
+            "Patient ID",
+            typeof session.patient === "object"
+                ? session.patient?._id
+                : session.patient,
+        ],
+    ];
+
+    return (
+        <div className="min-h-full bg-slate-50">
+            <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+                <button
+                    type="button"
+                    onClick={onBack}
+                    className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900"
+                >
+                    <span className="text-lg">←</span> Back to session history
+                </button>
+
+                <header className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">
+                        Session report
+                    </p>
+                    <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                        {session.exercise?.name || "Exercise session"}
+                    </h1>
+                    <p className="mt-1 text-sm text-slate-500">
+                        Patient:{" "}
+                        {patient?.user?.name || patient?.name || "Patient"}
+                    </p>
+                    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <ReportMetric
+                            label="Repetitions"
+                            value={`${session.completedReps ?? 0}${session.targetReps != null ? ` / ${session.targetReps}` : ""}`}
+                        />
+                        <ReportMetric
+                            label="Average score"
+                            value={`${score}%`}
+                        />
+                        <ReportMetric
+                            label="Duration"
+                            value={formatDuration(session.duration)}
+                        />
+                        <ReportMetric
+                            label="Status"
+                            value={session.status || "—"}
+                        />
+                    </div>
+                </header>
+
+                <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-900">
+                        Session information
+                    </h2>
+                    <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {fields.map(([label, value]) => (
+                            <div
+                                key={label}
+                                className="rounded-xl bg-slate-50 p-3"
+                            >
+                                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    {label}
+                                </dt>
+                                <dd className="mt-1 wrap-break-word text-sm font-medium text-slate-800">
+                                    {readable(value)}
+                                </dd>
+                            </div>
+                        ))}
+                    </dl>
+                </section>
+
+                <ReportDataSection
+                    title="Repetition scores"
+                    data={session.repScores}
+                />
+                <ReportDataSection
+                    title="Repetition details"
+                    data={session.repetitions}
+                />
+
+                <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <h2 className="mb-3 text-lg font-semibold text-slate-900">
+                        Complete session record
+                    </h2>
+                    <pre className="max-h-96 overflow-auto rounded-xl bg-slate-950 p-4 text-xs leading-5 text-slate-100">
+                        {JSON.stringify(session, null, 2)}
+                    </pre>
+                </section>
+            </div>
+        </div>
+    );
+}
+
+function ReportMetric({ label, value }) {
+    return (
+        <div className="rounded-xl bg-slate-50 p-3">
+            <p className="text-xs font-medium text-slate-400">{label}</p>
+            <p className="mt-1 wrap-break-word text-lg font-semibold text-slate-900">
+                {value}
+            </p>
+        </div>
+    );
+}
+
+function ReportDataSection({ title, data }) {
+    return (
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="mb-3 text-lg font-semibold text-slate-900">
+                {title}
+            </h2>
+            {Array.isArray(data) && data.length ? (
+                <pre className="max-h-80 overflow-auto rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-700">
+                    {JSON.stringify(data, null, 2)}
+                </pre>
+            ) : (
+                <p className="text-sm text-slate-400">
+                    No {title.toLowerCase()} were returned for this session.
+                </p>
+            )}
+        </section>
     );
 }
 
@@ -575,7 +751,7 @@ function TrendBadge({ trend }) {
 /* Session Row */
 /* ============================================================= */
 
-function SessionRow({ session }) {
+function SessionRow({ session, onClick }) {
     const score = Math.round(session.averageScore || 0);
 
     const date = session.completedAt ? formatDate(session.completedAt) : "—";
@@ -583,7 +759,12 @@ function SessionRow({ session }) {
     const duration = formatDuration(session.duration);
 
     return (
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr] items-center border-b border-slate-100 px-6 py-4 last:border-b-0 hover:bg-slate-50/70">
+        <button
+            type="button"
+            onClick={onClick}
+            className="grid w-full grid-cols-[2fr_1fr_1fr_1fr] items-center border-b border-slate-100 px-6 py-4 text-left transition last:border-b-0 hover:bg-blue-50/60 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+            aria-label={`View detailed report for ${session.exercise?.name || "exercise session"}`}
+        >
             <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-800">
                     {session.exercise?.name || "Exercise"}
@@ -612,12 +793,15 @@ function SessionRow({ session }) {
                 </span>
             </div>
 
-            <div>
+            <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium text-slate-600">
                     {duration}
                 </span>
+                <span className="text-xs font-semibold text-blue-600">
+                    View →
+                </span>
             </div>
-        </div>
+        </button>
     );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
@@ -15,6 +15,20 @@ const WASM_URL =
 const VIDEO_WIDTH = 1280;
 const VIDEO_HEIGHT = 720;
 
+const MIN_LANDMARK_CONFIDENCE = 0.6;
+const MIN_RELIABLE_LANDMARKS = 8;
+
+// Shoulders, elbows, wrists, hips, knees and ankles.
+const REQUIRED_LANDMARKS = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+
+function getLandmarkVisibility(point) {
+    if (!point || !Number.isFinite(point.visibility)) {
+        return 0;
+    }
+
+    return Math.max(0, Math.min(1, point.visibility));
+}
+
 function PoseTracker({ exercise, onResult, onReady, onStop }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -28,6 +42,7 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
 
     const lastVideoTimeRef = useRef(-1);
     const runningRef = useRef(false);
+    const stoppedRef = useRef(false);
 
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
@@ -41,7 +56,7 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
     useEffect(() => {
         if (!exercise) {
             judgeRef.current = null;
-            return;
+            return undefined;
         }
 
         judgeRef.current = new ROMJudge(exercise.configuration || exercise);
@@ -56,6 +71,55 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             feedbackRef.current = null;
         };
     }, [exercise]);
+
+    /* ========================================================= */
+    /* Publish invalid-pose state */
+    /* ========================================================= */
+
+    const publishInvalidPose = useCallback(
+        (message = "Keep your body visible in the camera.") => {
+            const judge = judgeRef.current;
+
+            // Discard any incomplete cycle so it cannot become a rep
+            // after tracking resumes.
+            judge?.handleInvalidPose?.();
+
+            const invalidResult = {
+                reps: judge?.reps ?? 0,
+                completedReps: judge?.reps ?? 0,
+
+                state: "INVALID_POSE",
+                phase: "INVALID_POSE",
+                progress: 0,
+
+                lastScore: judge?.lastRepScore ?? null,
+                score: null,
+
+                avgScore:
+                    judge?.scoredReps > 0
+                        ? judge.round(judge.averageScore)
+                        : null,
+
+                averageScore:
+                    judge?.scoredReps > 0
+                        ? judge.round(judge.averageScore)
+                        : null,
+
+                repScores: [...(judge?.repScores ?? [])],
+                rejectedAttempts: [...(judge?.rejectedAttempts ?? [])],
+
+                feedback: message,
+                ttsFeedback: "",
+                poseConfidence: 0,
+                scoreAvailable: false,
+                planeValid: false,
+            };
+
+            setResult(invalidResult);
+            onResult?.(invalidResult);
+        },
+        [onResult],
+    );
 
     /* ========================================================= */
     /* Initialize MediaPipe */
@@ -80,7 +144,6 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                         },
 
                         runningMode: "VIDEO",
-
                         numPoses: 1,
 
                         minPoseDetectionConfidence: 0.6,
@@ -97,18 +160,13 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                 poseLandmarkerRef.current = poseLandmarker;
 
                 setIsLoading(false);
-
-                if (onReady) {
-                    onReady();
-                }
+                onReady?.();
 
                 await startCamera();
             } catch (err) {
                 console.error("PoseLandmarker initialization failed:", err);
 
-                if (!mounted) {
-                    return;
-                }
+                if (!mounted) return;
 
                 setError(err.message || "Unable to initialize pose tracking.");
 
@@ -122,6 +180,8 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             mounted = false;
             stopTracking();
         };
+        // Camera/model initialization intentionally runs once.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     /* ========================================================= */
@@ -138,17 +198,10 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
 
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    width: {
-                        ideal: VIDEO_WIDTH,
-                    },
-
-                    height: {
-                        ideal: VIDEO_HEIGHT,
-                    },
-
+                    width: { ideal: VIDEO_WIDTH },
+                    height: { ideal: VIDEO_HEIGHT },
                     facingMode: "user",
                 },
-
                 audio: false,
             });
 
@@ -157,18 +210,19 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             const video = videoRef.current;
 
             if (!video) {
+                stream.getTracks().forEach((track) => track.stop());
                 return;
             }
 
             video.srcObject = stream;
-
             video.setAttribute("playsinline", "");
 
             await video.play();
 
-            setCameraReady(true);
-
+            stoppedRef.current = false;
             runningRef.current = true;
+
+            setCameraReady(true);
 
             processVideoFrame();
         } catch (err) {
@@ -183,9 +237,7 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
     /* ========================================================= */
 
     const processVideoFrame = () => {
-        if (!runningRef.current) {
-            return;
-        }
+        if (!runningRef.current) return;
 
         const video = videoRef.current;
         const poseLandmarker = poseLandmarkerRef.current;
@@ -206,21 +258,63 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         if (currentTime !== lastVideoTimeRef.current) {
             lastVideoTimeRef.current = currentTime;
 
-            const timestamp = performance.now();
-
             try {
                 const detection = poseLandmarker.detectForVideo(
                     video,
-                    timestamp,
+                    performance.now(),
                 );
 
                 handleDetection(detection);
             } catch (err) {
                 console.error("Pose detection failed:", err);
+                publishInvalidPose(
+                    "Pose tracking failed. Reposition yourself and try again.",
+                );
             }
         }
 
-        animationFrameRef.current = requestAnimationFrame(processVideoFrame);
+        if (runningRef.current) {
+            animationFrameRef.current =
+                requestAnimationFrame(processVideoFrame);
+        }
+    };
+
+    /* ========================================================= */
+    /* Validate Landmark Confidence */
+    /* ========================================================= */
+
+    const validateLandmarks = (landmarks) => {
+        if (!Array.isArray(landmarks) || !landmarks.length) {
+            return {
+                valid: false,
+                confidence: 0,
+                reliableCount: 0,
+            };
+        }
+
+        const requiredPoints = REQUIRED_LANDMARKS.map(
+            (index) => landmarks[index],
+        );
+
+        const reliablePoints = requiredPoints.filter(
+            (point) => getLandmarkVisibility(point) >= MIN_LANDMARK_CONFIDENCE,
+        );
+
+        const averageConfidence = reliablePoints.length
+            ? reliablePoints.reduce(
+                  (sum, point) => sum + getLandmarkVisibility(point),
+                  0,
+              ) / reliablePoints.length
+            : 0;
+
+        return {
+            valid:
+                reliablePoints.length >= MIN_RELIABLE_LANDMARKS &&
+                averageConfidence >= MIN_LANDMARK_CONFIDENCE,
+
+            confidence: averageConfidence,
+            reliableCount: reliablePoints.length,
+        };
     };
 
     /* ========================================================= */
@@ -228,23 +322,33 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
     /* ========================================================= */
 
     const handleDetection = (detection) => {
-        if (!detection || !detection.landmarks?.length) {
+        const landmarks = detection?.landmarks?.[0];
+        const worldLandmarks = detection?.worldLandmarks?.[0];
+
+        if (!landmarks || !worldLandmarks) {
             drawCanvas(null);
-            return;
-        }
 
-        const landmarks = detection.landmarks[0];
+            publishInvalidPose(
+                "No person detected. Move into the camera view.",
+            );
 
-        const worldLandmarks = detection.worldLandmarks?.[0];
-
-        if (!worldLandmarks) {
-            drawCanvas(landmarks);
             return;
         }
 
         drawCanvas(landmarks);
 
-        if (!judgeRef.current) {
+        if (!judgeRef.current) return;
+
+        // Gate all scoring on reliable body landmarks.
+        const confidence = validateLandmarks(landmarks);
+
+        if (!confidence.valid) {
+            publishInvalidPose(
+                `Low pose confidence (${Math.round(
+                    confidence.confidence * 100,
+                )}%). Keep your body visible in the camera.`,
+            );
+
             return;
         }
 
@@ -255,6 +359,10 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         const angles = PhysioGeometry.getStandardAngles(worldLandmarks);
 
         if (!angles) {
+            publishInvalidPose(
+                "Unable to calculate joint angles. Adjust your position.",
+            );
+
             return;
         }
 
@@ -264,9 +372,12 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
 
         const judgeResult = judgeRef.current.processFrame(angles);
 
-        if (!judgeResult) {
-            return;
-        }
+        if (!judgeResult) return;
+
+        // Include confidence for debugging and UI if needed.
+        judgeResult.poseConfidence = Math.round(confidence.confidence * 100);
+
+        judgeResult.reliableLandmarks = confidence.reliableCount;
 
         /* ----------------------------------------------------- */
         /* Audio Feedback */
@@ -281,14 +392,7 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         /* ----------------------------------------------------- */
 
         setResult(judgeResult);
-
-        /* ----------------------------------------------------- */
-        /* Send result to parent */
-        /* ----------------------------------------------------- */
-
-        if (onResult) {
-            onResult(judgeResult);
-        }
+        onResult?.(judgeResult);
     };
 
     /* ========================================================= */
@@ -299,28 +403,21 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         const canvas = canvasRef.current;
         const video = videoRef.current;
 
-        if (!canvas || !video) {
-            return;
-        }
+        if (!canvas || !video) return;
 
         const context = canvas.getContext("2d");
 
-        if (!context) {
-            return;
-        }
+        if (!context) return;
 
         const width = video.videoWidth || VIDEO_WIDTH;
-
         const height = video.videoHeight || VIDEO_HEIGHT;
 
-        canvas.width = width;
-        canvas.height = height;
+        if (canvas.width !== width) canvas.width = width;
+        if (canvas.height !== height) canvas.height = height;
 
         context.clearRect(0, 0, width, height);
 
-        if (!landmarks) {
-            return;
-        }
+        if (!landmarks) return;
 
         drawPose(context, landmarks, width, height);
     };
@@ -332,24 +429,17 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
     const drawPose = (context, landmarks, width, height) => {
         const connections = [
             [11, 12],
-
             [11, 13],
             [13, 15],
-
             [12, 14],
             [14, 16],
-
             [11, 23],
             [12, 24],
-
             [23, 24],
-
             [23, 25],
             [25, 27],
-
             [24, 26],
             [26, 28],
-
             [27, 31],
             [28, 32],
         ];
@@ -362,33 +452,34 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
             const start = landmarks[startIndex];
             const end = landmarks[endIndex];
 
-            if (!start || !end) {
-                continue;
-            }
+            if (!start || !end) continue;
 
-            if ((start.visibility ?? 1) < 0.3 || (end.visibility ?? 1) < 0.3) {
+            if (
+                getLandmarkVisibility(start) < 0.3 ||
+                getLandmarkVisibility(end) < 0.3
+            ) {
                 continue;
             }
 
             context.beginPath();
-
             context.moveTo(start.x * width, start.y * height);
-
             context.lineTo(end.x * width, end.y * height);
-
             context.stroke();
         }
 
         for (const landmark of landmarks) {
-            if (!landmark || (landmark.visibility ?? 1) < 0.3) {
+            if (!landmark || getLandmarkVisibility(landmark) < 0.3) {
                 continue;
             }
 
-            const x = landmark.x * width;
-            const y = landmark.y * height;
-
             context.beginPath();
-            context.arc(x, y, 5, 0, Math.PI * 2);
+            context.arc(
+                landmark.x * width,
+                landmark.y * height,
+                5,
+                0,
+                Math.PI * 2,
+            );
             context.fill();
         }
     };
@@ -398,11 +489,13 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
     /* ========================================================= */
 
     const stopTracking = () => {
+        if (stoppedRef.current) return;
+
+        stoppedRef.current = true;
         runningRef.current = false;
 
         if (animationFrameRef.current) {
             cancelAnimationFrame(animationFrameRef.current);
-
             animationFrameRef.current = null;
         }
 
@@ -425,10 +518,7 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         feedbackRef.current?.reset();
 
         setCameraReady(false);
-
-        if (onStop) {
-            onStop();
-        }
+        onStop?.();
     };
 
     /* ========================================================= */
@@ -439,9 +529,8 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
         judgeRef.current?.reset();
         feedbackRef.current?.reset();
 
-        setResult(null);
-
         lastVideoTimeRef.current = -1;
+        setResult(null);
     };
 
     /* ========================================================= */
@@ -450,10 +539,6 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
 
     return (
         <div className="w-full space-y-4">
-            {/* ================================================= */}
-            {/* Error */}
-            {/* ================================================= */}
-
             {error && (
                 <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
@@ -465,7 +550,6 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                             strokeWidth="2"
                         >
                             <circle cx="12" cy="12" r="9" />
-
                             <path strokeLinecap="round" d="M12 8v4M12 16h.01" />
                         </svg>
                     </div>
@@ -474,16 +558,12 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                         <p className="text-sm font-semibold text-red-800">
                             Pose tracking error
                         </p>
-
                         <p className="mt-0.5 text-sm text-red-700">{error}</p>
                     </div>
                 </div>
             )}
 
-            {/* ================================================= */}
             {/* Camera */}
-            {/* ================================================= */}
-
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-lg">
                 <div className="relative aspect-video w-full overflow-hidden">
                     <video
@@ -499,7 +579,6 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                         className="pointer-events-none absolute inset-0 h-full w-full object-cover"
                     />
 
-                    {/* Loading */}
                     {isLoading && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90">
                             <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-slate-700 border-t-blue-500">
@@ -516,7 +595,6 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                         </div>
                     )}
 
-                    {/* Camera starting */}
                     {!cameraReady && !isLoading && !error && (
                         <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80">
                             <div className="rounded-xl bg-white/10 px-4 py-3 text-sm font-medium text-white backdrop-blur">
@@ -525,7 +603,6 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                         </div>
                     )}
 
-                    {/* Live indicator */}
                     {cameraReady && !isLoading && (
                         <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-slate-950/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
                             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
@@ -533,14 +610,12 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                         </div>
                     )}
 
-                    {/* Exercise name */}
                     {exercise?.name && (
                         <div className="absolute right-4 top-4 max-w-[60%] rounded-lg bg-slate-950/70 px-3 py-1.5 text-xs font-medium text-white backdrop-blur">
                             {exercise.name}
                         </div>
                     )}
 
-                    {/* Feedback overlay */}
                     {result?.feedback && (
                         <div className="absolute bottom-4 left-1/2 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2">
                             <div className="rounded-xl border border-white/10 bg-slate-950/80 px-5 py-3.5 text-center text-sm font-semibold text-white shadow-lg backdrop-blur">
@@ -551,10 +626,7 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
                 </div>
             </section>
 
-            {/* ================================================= */}
             {/* Live Stats */}
-            {/* ================================================= */}
-
             {result && (
                 <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <LiveStat label="Phase" value={formatPhase(result.phase)} />
@@ -568,16 +640,17 @@ function PoseTracker({ exercise, onResult, onReady, onStop }) {
 
                     <LiveStat
                         label="Score"
-                        value={Math.round(result.score ?? 0)}
+                        value={
+                            result.score == null
+                                ? "—"
+                                : Math.round(result.score)
+                        }
                         score
                     />
                 </section>
             )}
 
-            {/* ================================================= */}
             {/* Controls */}
-            {/* ================================================= */}
-
             <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <p className="text-sm font-semibold text-slate-800">
@@ -638,9 +711,7 @@ function LiveStat({ label, value, score = false }) {
 /* ============================================================= */
 
 function formatPhase(phase) {
-    if (!phase) {
-        return "RESTING";
-    }
+    if (!phase) return "RESTING";
 
     return String(phase)
         .toLowerCase()
@@ -649,19 +720,12 @@ function formatPhase(phase) {
 }
 
 function getScoreTextClass(score) {
-    const value = Number(score) || 0;
+    const value = Number(score);
 
-    if (value >= 85) {
-        return "text-emerald-600";
-    }
-
-    if (value >= 70) {
-        return "text-blue-600";
-    }
-
-    if (value >= 50) {
-        return "text-amber-600";
-    }
+    if (!Number.isFinite(value)) return "text-slate-400";
+    if (value >= 85) return "text-emerald-600";
+    if (value >= 70) return "text-blue-600";
+    if (value >= 50) return "text-amber-600";
 
     return "text-red-600";
 }

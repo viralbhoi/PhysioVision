@@ -11,6 +11,7 @@ import assignmentRoutes from "./modules/assignment/assignment.routes.js";
 import sessionRoutes from "./modules/session/session.routes.js";
 import progressRoutes from "./modules/progress/progress.routes.js";
 import connectionRoutes from "./modules/connections/connection.routes.js";
+import generalizedSessionRoutes from "./modules/generalizedSessions/generalizedSession.routes.js";
 
 const app = express();
 
@@ -36,5 +37,6 @@ app.use("/api/assignments", assignmentRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/progress", progressRoutes);
 app.use("/api/connections", connectionRoutes);
+app.use("/api/generalized-sessions", generalizedSessionRoutes);
 
 export default app;
