@@ -34,57 +34,6 @@ async function request(endpoint, options = {}) {
     return data;
 }
 
-const styles = {
-    page: {
-        maxWidth: 1100,
-        margin: "0 auto",
-        padding: "28px 20px",
-        color: "#292524",
-    },
-    card: {
-        background: "#fff",
-        border: "1px solid #e7e5e4",
-        borderRadius: 16,
-        padding: 24,
-        marginBottom: 22,
-        boxShadow: "0 4px 18px rgba(0,0,0,0.035)",
-    },
-    label: {
-        display: "block",
-        fontSize: 14,
-        fontWeight: 600,
-        marginBottom: 7,
-    },
-    input: {
-        width: "100%",
-        boxSizing: "border-box",
-        border: "1px solid #d6d3d1",
-        borderRadius: 9,
-        padding: "11px 12px",
-        fontSize: 14,
-        background: "#fff",
-        color: "#292524",
-    },
-    primary: {
-        background: "#6b3e26",
-        color: "#fff",
-        border: 0,
-        borderRadius: 9,
-        padding: "11px 17px",
-        fontWeight: 600,
-        cursor: "pointer",
-    },
-    secondary: {
-        background: "#f5f1ed",
-        color: "#6b3e26",
-        border: "1px solid #e7d8cc",
-        borderRadius: 9,
-        padding: "9px 12px",
-        fontWeight: 600,
-        cursor: "pointer",
-    },
-};
-
 function getExerciseId(exercise) {
     return exercise?._id || exercise?.id;
 }
@@ -246,400 +195,332 @@ export default function GeneralizedSessions() {
     }
 
     return (
-        <main style={styles.page}>
-            <header style={{ marginBottom: 26 }}>
-                <p
-                    style={{
-                        color: "#8b5e3c",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        letterSpacing: 1.5,
-                        textTransform: "uppercase",
-                    }}
-                >
-                    PhysioVision · Live sessions
-                </p>
-
-                <h1 style={{ fontSize: 30, margin: "8px 0" }}>
-                    Generalized Sessions
-                </h1>
-
-                <p style={{ color: "#78716c", lineHeight: 1.6 }}>
-                    Create a shared exercise session and invite participants
-                    with a link and password. Participants do not need an
-                    existing patient–physiotherapist assignment.
-                </p>
-            </header>
-
-            {error && (
-                <div
-                    role="alert"
-                    style={{
-                        background: "#fef2f2",
-                        color: "#b91c1c",
-                        borderRadius: 9,
-                        padding: 13,
-                        marginBottom: 16,
-                    }}
-                >
-                    {error}
-                </div>
-            )}
-
-            {notice && (
-                <div
-                    role="status"
-                    style={{
-                        background: "#f0fdf4",
-                        color: "#166534",
-                        borderRadius: 9,
-                        padding: 13,
-                        marginBottom: 16,
-                        overflowWrap: "anywhere",
-                    }}
-                >
-                    {notice}
-                </div>
-            )}
-
-            <section style={styles.card}>
-                <h2 style={{ fontSize: 21, marginTop: 0 }}>Create a session</h2>
-
-                <form onSubmit={handleCreate}>
-                    <div style={{ marginBottom: 16 }}>
-                        <label style={styles.label} htmlFor="session-title">
-                            Session title
-                        </label>
-                        <input
-                            id="session-title"
-                            style={styles.input}
-                            value={title}
-                            onChange={(event) => setTitle(event.target.value)}
-                            placeholder="e.g. Morning mobility session"
-                            maxLength={120}
-                            required
-                        />
-                    </div>
-
-                    <div style={{ marginBottom: 16 }}>
-                        <label
-                            style={styles.label}
-                            htmlFor="session-description"
-                        >
-                            Description (optional)
-                        </label>
-                        <textarea
-                            id="session-description"
-                            style={{
-                                ...styles.input,
-                                minHeight: 90,
-                                resize: "vertical",
-                            }}
-                            value={description}
-                            onChange={(event) =>
-                                setDescription(event.target.value)
-                            }
-                            placeholder="Instructions or details for participants"
-                            maxLength={1000}
-                        />
-                    </div>
-
-                    <div style={{ marginBottom: 16 }}>
-                        <label style={styles.label}>
-                            Select exercises ({selectedExercises.length}{" "}
-                            selected)
-                        </label>
-
-                        <div
-                            style={{
-                                border: "1px solid #e7e5e4",
-                                borderRadius: 10,
-                                maxHeight: 260,
-                                overflowY: "auto",
-                            }}
-                        >
-                            {loading ? (
-                                <p style={{ padding: 14 }}>
-                                    Loading exercises…
-                                </p>
-                            ) : exercises.length === 0 ? (
-                                <p style={{ padding: 14, color: "#78716c" }}>
-                                    No exercises were returned by your exercise
-                                    API.
-                                </p>
-                            ) : (
-                                exercises.map((exercise) => {
-                                    const id = getExerciseId(exercise);
-
-                                    if (!id) return null;
-
-                                    return (
-                                        <label
-                                            key={id}
-                                            style={{
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: 11,
-                                                padding: "12px 14px",
-                                                borderBottom:
-                                                    "1px solid #f5f5f4",
-                                                cursor: "pointer",
-                                            }}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedExercises.includes(
-                                                    id,
-                                                )}
-                                                onChange={() =>
-                                                    toggleExercise(id)
-                                                }
-                                            />
-                                            <span>
-                                                {getExerciseName(exercise)}
-                                            </span>
-                                        </label>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </div>
-
+        <div className="min-h-screen bg-slate-50 text-slate-900">
+            <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:py-10">
+                <header className="mb-8">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">
+                        PhysioVision · Live sessions
+                    </p>
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+                        Generalized Sessions
+                    </h1>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
+                        Create a shared exercise session and invite participants
+                        with a link and password. Participants do not need an
+                        existing patient–physiotherapist assignment.
+                    </p>
+                </header>
+                {error && (
                     <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns:
-                                "repeat(auto-fit, minmax(220px, 1fr))",
-                            gap: 16,
-                            marginBottom: 20,
-                        }}
+                        role="alert"
+                        className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm text-red-700"
                     >
+                        {error}
+                    </div>
+                )}
+                {notice && (
+                    <div
+                        role="status"
+                        className="mb-5 break-words rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-sm text-emerald-800"
+                    >
+                        {notice}
+                    </div>
+                )}
+
+                <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+                    <div className="mb-6">
+                        <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+                            Create a session
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">
+                            Choose exercises, set access details, and share the
+                            invite.
+                        </p>
+                    </div>
+                    <form onSubmit={handleCreate} className="space-y-5">
                         <div>
                             <label
-                                style={styles.label}
-                                htmlFor="session-password"
+                                className="mb-2 block text-sm font-medium text-slate-700"
+                                htmlFor="session-title"
                             >
-                                Session password
+                                Session title
                             </label>
                             <input
-                                id="session-password"
-                                type="password"
-                                style={styles.input}
-                                value={password}
+                                id="session-title"
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                                value={title}
                                 onChange={(event) =>
-                                    setPassword(event.target.value)
+                                    setTitle(event.target.value)
                                 }
-                                placeholder="At least 4 characters"
-                                minLength={4}
-                                autoComplete="new-password"
+                                placeholder="e.g. Morning mobility session"
+                                maxLength={120}
                                 required
                             />
                         </div>
-
                         <div>
                             <label
-                                style={styles.label}
-                                htmlFor="session-expiry"
+                                className="mb-2 block text-sm font-medium text-slate-700"
+                                htmlFor="session-description"
                             >
-                                Expiration (optional)
+                                Description{" "}
+                                <span className="font-normal text-slate-400">
+                                    (optional)
+                                </span>
                             </label>
-                            <input
-                                id="session-expiry"
-                                type="datetime-local"
-                                style={styles.input}
-                                value={expiresAt}
+                            <textarea
+                                id="session-description"
+                                className="min-h-24 w-full resize-y rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                                value={description}
                                 onChange={(event) =>
-                                    setExpiresAt(event.target.value)
+                                    setDescription(event.target.value)
                                 }
-                                min={new Date(
-                                    Date.now() -
-                                        new Date().getTimezoneOffset() * 60000,
-                                )
-                                    .toISOString()
-                                    .slice(0, 16)}
+                                placeholder="Instructions or details for participants"
+                                maxLength={1000}
                             />
                         </div>
-                    </div>
-
-                    <button
-                        type="submit"
-                        style={{
-                            ...styles.primary,
-                            opacity: creating ? 0.65 : 1,
-                        }}
-                        disabled={creating || loading}
-                    >
-                        {creating
-                            ? "Creating session…"
-                            : "Create & generate invite"}
-                    </button>
-                </form>
-            </section>
-
-            <section style={styles.card}>
-                <div
-                    style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 12,
-                        flexWrap: "wrap",
-                    }}
-                >
-                    <h2 style={{ fontSize: 21, marginTop: 0 }}>
-                        Your sessions
-                    </h2>
-
-                    <button
-                        type="button"
-                        style={styles.secondary}
-                        onClick={loadData}
-                        disabled={loading}
-                    >
-                        Refresh
-                    </button>
-                </div>
-
-                {loading ? (
-                    <p>Loading your sessions…</p>
-                ) : sessions.length === 0 ? (
-                    <p style={{ color: "#78716c" }}>
-                        You haven't created a generalized session yet.
-                    </p>
-                ) : (
-                    <div style={{ display: "grid", gap: 14 }}>
-                        {sessions.map((session) => (
-                            <article
-                                key={session._id}
-                                style={{
-                                    border: "1px solid #e7e5e4",
-                                    borderRadius: 12,
-                                    padding: 17,
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "flex-start",
-                                        gap: 12,
-                                        flexWrap: "wrap",
-                                    }}
+                        <div>
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <label className="block text-sm font-medium text-slate-700">
+                                    Select exercises
+                                </label>
+                                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                    {selectedExercises.length} selected
+                                </span>
+                            </div>
+                            <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200">
+                                {loading ? (
+                                    <p className="p-4 text-sm text-slate-500">
+                                        Loading exercises…
+                                    </p>
+                                ) : exercises.length === 0 ? (
+                                    <p className="p-4 text-sm text-slate-500">
+                                        No exercises were returned by your
+                                        exercise API.
+                                    </p>
+                                ) : (
+                                    exercises.map((exercise) => {
+                                        const id = getExerciseId(exercise);
+                                        if (!id) return null;
+                                        const selected =
+                                            selectedExercises.includes(id);
+                                        return (
+                                            <label
+                                                key={id}
+                                                className={`flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-3.5 text-sm last:border-0 hover:bg-slate-50 ${selected ? "bg-blue-50/60" : "bg-white"}`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                    checked={selected}
+                                                    onChange={() =>
+                                                        toggleExercise(id)
+                                                    }
+                                                />
+                                                <span
+                                                    className={`font-medium ${selected ? "text-blue-900" : "text-slate-700"}`}
+                                                >
+                                                    {getExerciseName(exercise)}
+                                                </span>
+                                                {selected && (
+                                                    <span className="ml-auto text-xs font-semibold text-blue-700">
+                                                        Selected
+                                                    </span>
+                                                )}
+                                            </label>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                            <div>
+                                <label
+                                    className="mb-2 block text-sm font-medium text-slate-700"
+                                    htmlFor="session-password"
                                 >
-                                    <div>
-                                        <h3
-                                            style={{
-                                                margin: "0 0 7px",
-                                                fontSize: 18,
-                                            }}
-                                        >
-                                            {session.title}
-                                        </h3>
+                                    Session password
+                                </label>
+                                <input
+                                    id="session-password"
+                                    type="password"
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                                    value={password}
+                                    onChange={(event) =>
+                                        setPassword(event.target.value)
+                                    }
+                                    placeholder="At least 4 characters"
+                                    minLength={4}
+                                    autoComplete="new-password"
+                                    required
+                                />
+                                <p className="mt-1.5 text-xs text-slate-400">
+                                    Participants need this password to join.
+                                </p>
+                            </div>
+                            <div>
+                                <label
+                                    className="mb-2 block text-sm font-medium text-slate-700"
+                                    htmlFor="session-expiry"
+                                >
+                                    Expiration{" "}
+                                    <span className="font-normal text-slate-400">
+                                        (optional)
+                                    </span>
+                                </label>
+                                <input
+                                    id="session-expiry"
+                                    type="datetime-local"
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                                    value={expiresAt}
+                                    onChange={(event) =>
+                                        setExpiresAt(event.target.value)
+                                    }
+                                    min={new Date(
+                                        Date.now() -
+                                            new Date().getTimezoneOffset() *
+                                                60000,
+                                    )
+                                        .toISOString()
+                                        .slice(0, 16)}
+                                />
+                                <p className="mt-1.5 text-xs text-slate-400">
+                                    Leave blank if the invite should not expire.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-xs text-slate-400">
+                                You can close or reopen the session later.
+                            </p>
+                            <button
+                                type="submit"
+                                disabled={creating || loading}
+                                className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {creating
+                                    ? "Creating session…"
+                                    : "Create & generate invite"}
+                            </button>
+                        </div>
+                    </form>
+                </section>
 
-                                        <p
-                                            style={{
-                                                margin: "0 0 10px",
-                                                color: "#78716c",
-                                                fontSize: 13,
-                                            }}
-                                        >
-                                            {session.description ||
-                                                "No description"}
-                                        </p>
-
-                                        <p
-                                            style={{
-                                                fontSize: 13,
-                                                margin: "5px 0",
-                                            }}
-                                        >
-                                            Invite code:{" "}
-                                            <strong>
-                                                {session.inviteCode}
-                                            </strong>
-                                        </p>
-
-                                        <p
-                                            style={{
-                                                fontSize: 13,
-                                                margin: "5px 0",
-                                            }}
-                                        >
-                                            Exercises:{" "}
-                                            {session.exercises?.length || 0}
-                                        </p>
-
-                                        <p
-                                            style={{
-                                                fontSize: 13,
-                                                margin: "5px 0",
-                                            }}
-                                        >
-                                            Participants:{" "}
-                                            {session.participants?.length || 0}
-                                        </p>
-
-                                        <p
-                                            style={{
-                                                fontSize: 13,
-                                                margin: "8px 0 0",
-                                            }}
-                                        >
-                                            Status:{" "}
-                                            <strong
-                                                style={{
-                                                    color: session.isActive
-                                                        ? "#15803d"
-                                                        : "#b91c1c",
-                                                }}
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+                    <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                        <div>
+                            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+                                Your sessions
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Manage invites and check session activity.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                            onClick={loadData}
+                            disabled={loading}
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                    {loading ? (
+                        <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-500">
+                            Loading your sessions…
+                        </p>
+                    ) : sessions.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
+                            <p className="text-sm font-semibold text-slate-700">
+                                No sessions yet
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Create your first generalized session above to
+                                get started.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                            {sessions.map((session) => (
+                                <article
+                                    key={session._id}
+                                    className="rounded-xl border border-slate-200 p-4 transition hover:border-slate-300 hover:shadow-sm sm:p-5"
+                                >
+                                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                                                <h3 className="break-words text-base font-semibold text-slate-900">
+                                                    {session.title}
+                                                </h3>
+                                                <span
+                                                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${session.isActive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                                                >
+                                                    {session.isActive
+                                                        ? "Active"
+                                                        : "Closed"}
+                                                </span>
+                                            </div>
+                                            <p className="mb-4 text-sm leading-5 text-slate-500">
+                                                {session.description ||
+                                                    "No description"}
+                                            </p>
+                                            <div className="mb-4 rounded-lg bg-slate-50 px-3 py-2.5">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                                    Invite code
+                                                </p>
+                                                <p className="mt-1 break-all font-mono text-sm font-semibold text-slate-800">
+                                                    {session.inviteCode}
+                                                </p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="rounded-lg border border-slate-100 px-3 py-2">
+                                                    <p className="text-xs text-slate-500">
+                                                        Exercises
+                                                    </p>
+                                                    <p className="mt-1 text-lg font-semibold text-slate-900">
+                                                        {session.exercises
+                                                            ?.length || 0}
+                                                    </p>
+                                                </div>
+                                                <div className="rounded-lg border border-slate-100 px-3 py-2">
+                                                    <p className="text-xs text-slate-500">
+                                                        Participants
+                                                    </p>
+                                                    <p className="mt-1 text-lg font-semibold text-slate-900">
+                                                        {session.participants
+                                                            ?.length || 0}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex shrink-0 flex-row gap-2 sm:flex-col">
+                                            <button
+                                                type="button"
+                                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 sm:text-sm"
+                                                onClick={() =>
+                                                    copyInviteLink(session)
+                                                }
+                                            >
+                                                Copy invite link
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition sm:text-sm ${session.isActive ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
+                                                onClick={() =>
+                                                    toggleStatus(session)
+                                                }
                                             >
                                                 {session.isActive
-                                                    ? "Active"
-                                                    : "Closed"}
-                                            </strong>
-                                        </p>
+                                                    ? "Close session"
+                                                    : "Reopen session"}
+                                            </button>
+                                        </div>
                                     </div>
-
-                                    <div
-                                        style={{
-                                            display: "flex",
-                                            gap: 8,
-                                            flexWrap: "wrap",
-                                        }}
-                                    >
-                                        <button
-                                            type="button"
-                                            style={styles.secondary}
-                                            onClick={() =>
-                                                copyInviteLink(session)
-                                            }
-                                        >
-                                            Copy invite link
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            style={{
-                                                ...styles.secondary,
-                                                color: session.isActive
-                                                    ? "#b91c1c"
-                                                    : "#166534",
-                                            }}
-                                            onClick={() =>
-                                                toggleStatus(session)
-                                            }
-                                        >
-                                            {session.isActive
-                                                ? "Close session"
-                                                : "Reopen session"}
-                                        </button>
-                                    </div>
-                                </div>
-                            </article>
-                        ))}
-                    </div>
-                )}
-            </section>
-        </main>
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            </main>
+        </div>
     );
 }

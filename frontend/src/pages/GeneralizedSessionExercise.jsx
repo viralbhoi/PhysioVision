@@ -32,6 +32,7 @@ export default function GeneralizedSessionExercise() {
     const [error, setError] = useState("");
     const [activeIndex, setActiveIndex] = useState(0);
     const [resultsByExercise, setResultsByExercise] = useState({});
+    const [completedExerciseKeys, setCompletedExerciseKeys] = useState({});
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [finished, setFinished] = useState(false);
 
@@ -146,6 +147,54 @@ export default function GeneralizedSessionExercise() {
     }
 
     if (finished) {
+        const completedRows = exercises
+            .map((item, index) => {
+                const key = item?._id || item?.id || `${index}`;
+                return completedExerciseKeys[key]
+                    ? {
+                          exercise: item,
+                          result: resultsByExercise[key] || {},
+                          key,
+                      }
+                    : null;
+            })
+            .filter(Boolean);
+        const totalReps = completedRows.reduce(
+            (sum, row) =>
+                sum +
+                Math.max(
+                    0,
+                    Number(row.result?.reps ?? row.result?.completedReps ?? 0),
+                ),
+            0,
+        );
+        const scoredRows = completedRows
+            .map((row) =>
+                Number(
+                    row.result?.poseMatchScore ??
+                        row.result?.score ??
+                        row.result?.averageScore,
+                ),
+            )
+            .filter((score) => Number.isFinite(score) && score > 0);
+        const averageScore = scoredRows.length
+            ? Math.round(
+                  scoredRows.reduce((sum, score) => sum + score, 0) /
+                      scoredRows.length,
+              )
+            : null;
+        const totalHoldSeconds = completedRows.reduce(
+            (sum, row) =>
+                sum +
+                Math.max(
+                    0,
+                    Number(
+                        row.result?.holdSeconds ?? row.result?.heldSeconds ?? 0,
+                    ),
+                ),
+            0,
+        );
+
         return (
             <main className="min-h-screen bg-slate-50 px-4 py-12">
                 <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm sm:p-10">
@@ -179,6 +228,83 @@ export default function GeneralizedSessionExercise() {
                             Time spent: {formatTime(elapsedSeconds)}
                         </p>
                     </div>
+
+                    <section className="mt-6">
+                        <h2 className="text-lg font-bold text-slate-950">
+                            Temporary progress report
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">
+                            This report is generated in this browser and is not
+                            stored in the database.
+                        </p>
+                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            <SummaryMetric
+                                label="Exercises completed"
+                                value={`${completedRows.length} / ${exercises.length}`}
+                            />
+                            <SummaryMetric
+                                label="Total repetitions"
+                                value={String(totalReps)}
+                            />
+                            <SummaryMetric
+                                label="Average score"
+                                value={
+                                    averageScore === null
+                                        ? "—"
+                                        : `${averageScore}%`
+                                }
+                            />
+                            <SummaryMetric
+                                label="Total hold time"
+                                value={formatTime(totalHoldSeconds)}
+                            />
+                        </div>
+                        <div className="mt-4 space-y-3">
+                            {completedRows.length ? (
+                                completedRows.map(
+                                    ({ exercise: item, result, key }) => {
+                                        const score =
+                                            result?.poseMatchScore ??
+                                            result?.score ??
+                                            result?.averageScore;
+                                        const reps =
+                                            result?.reps ??
+                                            result?.completedReps;
+                                        const hold =
+                                            result?.holdSeconds ??
+                                            result?.heldSeconds;
+                                        return (
+                                            <article
+                                                key={key}
+                                                className="rounded-xl border border-slate-200 p-4 text-left"
+                                            >
+                                                <h3 className="font-semibold text-slate-900">
+                                                    {getExerciseName(item)}
+                                                </h3>
+                                                <p className="mt-2 text-sm text-slate-600">
+                                                    {reps != null
+                                                        ? `Repetitions: ${reps}`
+                                                        : "Repetitions: not reported"}
+                                                    {score != null
+                                                        ? ` · Score: ${Math.round(Number(score))}%`
+                                                        : " · Score: not reported"}
+                                                    {hold != null
+                                                        ? ` · Hold: ${formatTime(hold)}`
+                                                        : ""}
+                                                </p>
+                                            </article>
+                                        );
+                                    },
+                                )
+                            ) : (
+                                <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+                                    No exercises were marked complete, so there
+                                    are no completed exercise results to
+                                    summarize.
+                                </p>
+                            )}
+                        </div>
+                    </section>
                     <Link
                         to={`/join-session/${encodeURIComponent(inviteCode || "")}`}
                         className="mt-6 inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -331,24 +457,27 @@ export default function GeneralizedSessionExercise() {
                     </div>
                 </section>
 
-                <section className="mb-5">
-                    <ExerciseReferenceMedia exercise={exercise} />
-                </section>
+                {/* Reference media (30%) + live tracking (70%) */}
+                <section className="mb-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[30fr_70fr]">
+                    <div className="min-w-0">
+                        <ExerciseReferenceMedia exercise={exercise} />
+                    </div>
 
-                <section className="mb-5">
-                    {staticPose ? (
-                        <StaticYogaPoseTracker
-                            key={exerciseKey}
-                            exercise={exercise}
-                            onResult={handleResult}
-                        />
-                    ) : (
-                        <PoseTracker
-                            key={exerciseKey}
-                            exercise={exercise}
-                            onResult={handleResult}
-                        />
-                    )}
+                    <div className="min-w-0">
+                        {staticPose ? (
+                            <StaticYogaPoseTracker
+                                key={exerciseKey}
+                                exercise={exercise}
+                                onResult={handleResult}
+                            />
+                        ) : (
+                            <PoseTracker
+                                key={exerciseKey}
+                                exercise={exercise}
+                                onResult={handleResult}
+                            />
+                        )}
+                    </div>
                 </section>
 
                 <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -416,7 +545,13 @@ export default function GeneralizedSessionExercise() {
                     {activeIndex < exercises.length - 1 ? (
                         <button
                             type="button"
-                            onClick={() => goToExercise(activeIndex + 1)}
+                            onClick={() => {
+                                setCompletedExerciseKeys((previous) => ({
+                                    ...previous,
+                                    [exerciseKey]: true,
+                                }));
+                                goToExercise(activeIndex + 1);
+                            }}
                             className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
                         >
                             Next exercise →
@@ -424,7 +559,13 @@ export default function GeneralizedSessionExercise() {
                     ) : (
                         <button
                             type="button"
-                            onClick={() => setFinished(true)}
+                            onClick={() => {
+                                setCompletedExerciseKeys((previous) => ({
+                                    ...previous,
+                                    [exerciseKey]: true,
+                                }));
+                                setFinished(true);
+                            }}
                             className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
                         >
                             Finish session
@@ -433,6 +574,15 @@ export default function GeneralizedSessionExercise() {
                 </footer>
             </div>
         </main>
+    );
+}
+
+function SummaryMetric({ label, value }) {
+    return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-xs text-slate-500">{label}</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">{value}</p>
+        </div>
     );
 }
 

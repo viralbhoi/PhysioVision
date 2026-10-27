@@ -314,27 +314,28 @@ function ExerciseSession({ assignment, onBack }) {
                     </div>
                 )}
 
-                {/* Reference media */}
-                <div className="mb-6">
-                    <ExerciseReferenceMedia exercise={exercise} />
-                </div>
+                {/* Reference media (30%) + live tracking (70%) */}
+                <section className="mb-6 grid grid-cols-1 items-start gap-5 lg:grid-cols-[30fr_70fr]">
+                    <div className="min-w-0">
+                        <ExerciseReferenceMedia exercise={exercise} />
+                    </div>
 
-                {/* Main tracking panel */}
-                <section className="mb-6">
-                    {isStaticYoga ? (
-                        <StaticYogaPoseTracker
-                            key={session?._id || assignment._id}
-                            exercise={exercise}
-                            onResult={handleResult}
-                            disabled={finishing}
-                        />
-                    ) : (
-                        <PoseTracker
-                            key={session?._id || assignment._id}
-                            exercise={exercise}
-                            onResult={handleResult}
-                        />
-                    )}
+                    <div className="min-w-0">
+                        {isStaticYoga ? (
+                            <StaticYogaPoseTracker
+                                key={session?._id || assignment._id}
+                                exercise={exercise}
+                                onResult={handleResult}
+                                disabled={finishing}
+                            />
+                        ) : (
+                            <PoseTracker
+                                key={session?._id || assignment._id}
+                                exercise={exercise}
+                                onResult={handleResult}
+                            />
+                        )}
+                    </div>
                 </section>
 
                 {/* Live results */}
