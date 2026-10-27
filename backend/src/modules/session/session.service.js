@@ -44,6 +44,11 @@ export const completeSession = async ({
     averageScore,
     repScores,
     duration,
+    targetHoldSeconds,
+    holdDuration,
+    poseMatchScore,
+    holdCompleted,
+    validScoreFrames,
 }) => {
     const patient = await Patient.findOne({
         user: userId,
@@ -74,7 +79,18 @@ export const completeSession = async ({
 
     session.averageScore = averageScore || 0;
 
-    session.repScores = repScores || [];
+    session.repScores = Array.isArray(repScores) ? repScores : [];
+
+    // Persist static-yoga metrics explicitly. A missing value must not be
+    // inferred from the overall session duration or repetition fields.
+    session.targetHoldSeconds = Math.max(0, Number(targetHoldSeconds) || 0);
+    session.holdDuration = Math.max(0, Number(holdDuration) || 0);
+    session.poseMatchScore = Math.max(
+        0,
+        Math.min(100, Number(poseMatchScore ?? averageScore) || 0),
+    );
+    session.holdCompleted = Boolean(holdCompleted);
+    session.validScoreFrames = Math.max(0, Number(validScoreFrames) || 0);
 
     session.status = "COMPLETED";
 
@@ -101,7 +117,10 @@ export const completeSession = async ({
 
             averageRepScore: averageScore || 0,
 
-            summary: `Completed ${completedReps || 0} repetitions with an average score of ${Math.round(averageScore || 0)}.`,
+            summary:
+                session.targetHoldSeconds > 0
+                    ? `Held the yoga pose for ${session.holdDuration || 0} of ${session.targetHoldSeconds} seconds with average pose accuracy ${Math.round(session.poseMatchScore || 0)}%.`
+                    : `Completed ${completedReps || 0} repetitions with an average score of ${Math.round(averageScore || 0)}.`,
         },
         {
             upsert: true,

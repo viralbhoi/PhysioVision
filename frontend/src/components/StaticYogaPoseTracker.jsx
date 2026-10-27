@@ -10,7 +10,7 @@ const WASM_URL =
 const MODEL_URL =
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 
-const REQUIRED_VISIBILITY = 0.5;
+const REQUIRED_VISIBILITY = 0.6;
 const DEFAULT_THRESHOLD = 75;
 
 function clamp(value, min, max) {
@@ -30,37 +30,44 @@ function angleDifference(a, b) {
     return Math.min(difference, 360 - difference);
 }
 
-function normalizeAngles(angles) {
+function toAngleMap(angles) {
+    // Calibration and live feature extraction both return [{ name, value }].
+    // Also accept keyed objects for compatibility with older saved exercises.
     if (Array.isArray(angles)) {
         return Object.fromEntries(
             angles
                 .filter(
-                    (item) => item?.name && Number.isFinite(Number(item.value)),
+                    (item) =>
+                        item &&
+                        typeof item.name === "string" &&
+                        Number.isFinite(Number(item.value)),
                 )
                 .map((item) => [item.name, Number(item.value)]),
         );
     }
 
-    if (!angles || typeof angles !== "object") return {};
+    if (angles && typeof angles === "object") {
+        return Object.fromEntries(
+            Object.entries(angles)
+                .filter(([, value]) => Number.isFinite(Number(value)))
+                .map(([name, value]) => [name, Number(value)]),
+        );
+    }
 
-    return Object.fromEntries(
-        Object.entries(angles)
-            .filter(([, value]) => Number.isFinite(Number(value)))
-            .map(([name, value]) => [name, Number(value)]),
-    );
+    return {};
 }
 
 function calculateAngleScore(referenceAngles, currentAngles) {
-    const reference = normalizeAngles(referenceAngles);
-    const current = normalizeAngles(currentAngles);
-    const commonNames = Object.keys(reference).filter((name) =>
-        Number.isFinite(current[name]),
+    const reference = toAngleMap(referenceAngles);
+    const current = toAngleMap(currentAngles);
+    const keys = Object.keys(reference).filter((key) =>
+        Number.isFinite(current[key]),
     );
 
-    if (commonNames.length === 0) return null;
+    if (keys.length === 0) return null;
 
-    const scores = commonNames.map((name) => {
-        const difference = angleDifference(reference[name], current[name]);
+    const scores = keys.map((key) => {
+        const difference = angleDifference(reference[key], current[key]);
         return clamp(100 * (1 - difference / 45), 0, 100);
     });
 
@@ -83,24 +90,28 @@ function calculateLandmarkScore(referenceLandmarks, currentLandmarks) {
 
         if (!reference || !current) continue;
 
-        const rx = Number(reference.x);
-        const ry = Number(reference.y);
-        const rz = Number(reference.z ?? 0);
-
-        const cx = Number(current.x);
-        const cy = Number(current.y);
-        const cz = Number(current.z ?? 0);
-
+        // Hidden landmarks are saved with null coordinates. Do not coerce
+        // null to 0, otherwise missing points create artificial score errors.
+        const coordinates = [reference.x, reference.y, current.x, current.y];
         if (
-            !Number.isFinite(rx) ||
-            !Number.isFinite(ry) ||
-            !Number.isFinite(rz) ||
-            !Number.isFinite(cx) ||
-            !Number.isFinite(cy) ||
-            !Number.isFinite(cz)
+            !coordinates.every(
+                (value) => typeof value === "number" && Number.isFinite(value),
+            )
         ) {
             continue;
         }
+        const rx = reference.x;
+        const ry = reference.y;
+        const rz =
+            typeof reference.z === "number" && Number.isFinite(reference.z)
+                ? reference.z
+                : 0;
+        const cx = current.x;
+        const cy = current.y;
+        const cz =
+            typeof current.z === "number" && Number.isFinite(current.z)
+                ? current.z
+                : 0;
 
         distances.push(
             Math.sqrt((rx - cx) ** 2 + (ry - cy) ** 2 + (rz - cz) ** 2),
@@ -179,6 +190,17 @@ function evaluatePose(referencePose, features, threshold) {
     };
 }
 
+function isTrackingReliable(pose) {
+    const unreliableStatuses = new Set([
+        "Move into the camera view.",
+        "Keep your body visible in the camera.",
+        "Reference pose configuration is missing.",
+        "Unable to compare this pose with the reference.",
+    ]);
+
+    return Boolean(pose) && !unreliableStatuses.has(pose.status);
+}
+
 function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -187,6 +209,7 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
     const animationRef = useRef(null);
     const lastVideoTimeRef = useRef(-1);
     const onResultRef = useRef(onResult);
+    const scoreStatsRef = useRef({ total: 0, count: 0 });
 
     const holdRef = useRef({
         accumulatedMs: 0,
@@ -196,7 +219,6 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
     });
 
     const [cameraReady, setCameraReady] = useState(false);
-    const [videoSize, setVideoSize] = useState({ width: 16, height: 9 });
     const [modelReady, setModelReady] = useState(false);
     const [poseResult, setPoseResult] = useState({
         score: 0,
@@ -228,10 +250,30 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
 
     const emitResult = useCallback(
         (nextPose, nextHold) => {
+            const isEvaluatedFrame =
+                Number.isFinite(Number(nextPose?.score)) &&
+                nextPose?.status !== "Move into the camera view." &&
+                nextPose?.status !== "Keep your body visible in the camera." &&
+                nextPose?.status !==
+                    "Reference pose configuration is missing." &&
+                nextPose?.status !==
+                    "Unable to compare this pose with the reference.";
+            if (isEvaluatedFrame) {
+                scoreStatsRef.current.total += Number(nextPose.score);
+                scoreStatsRef.current.count += 1;
+            }
+            const averageScore = scoreStatsRef.current.count
+                ? Math.round(
+                      scoreStatsRef.current.total / scoreStatsRef.current.count,
+                  )
+                : 0;
             onResultRef.current?.({
                 score: nextPose.score,
                 poseMatchScore: nextPose.score,
+                averageScore,
+                validScoreFrames: scoreStatsRef.current.count,
                 status: nextPose.status,
+                trackingReliable: isTrackingReliable(nextPose),
                 isPoseMatched: nextPose.matched,
                 holdSeconds: nextHold.elapsedSeconds,
                 heldSeconds: nextHold.elapsedSeconds,
@@ -329,20 +371,42 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
 
                 const vision = await FilesetResolver.forVisionTasks(WASM_URL);
 
-                const landmarker = await PoseLandmarker.createFromOptions(
-                    vision,
-                    {
-                        baseOptions: {
-                            modelAssetPath: MODEL_URL,
-                            delegate: "GPU",
+                const options = {
+                    runningMode: "VIDEO",
+                    numPoses: 1,
+                    minPoseDetectionConfidence: 0.5,
+                    minPosePresenceConfidence: 0.5,
+                    minTrackingConfidence: 0.5,
+                };
+
+                let landmarker;
+                try {
+                    landmarker = await PoseLandmarker.createFromOptions(
+                        vision,
+                        {
+                            ...options,
+                            baseOptions: {
+                                modelAssetPath: MODEL_URL,
+                                delegate: "GPU",
+                            },
                         },
-                        runningMode: "VIDEO",
-                        numPoses: 1,
-                        minPoseDetectionConfidence: 0.5,
-                        minPosePresenceConfidence: 0.5,
-                        minTrackingConfidence: 0.5,
-                    },
-                );
+                    );
+                } catch (gpuError) {
+                    console.warn(
+                        "Yoga tracker GPU initialization failed; retrying on CPU.",
+                        gpuError,
+                    );
+                    landmarker = await PoseLandmarker.createFromOptions(
+                        vision,
+                        {
+                            ...options,
+                            baseOptions: {
+                                modelAssetPath: MODEL_URL,
+                                delegate: "CPU",
+                            },
+                        },
+                    );
+                }
 
                 if (cancelled) {
                     landmarker.close();
@@ -376,11 +440,6 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
 
                 video.srcObject = stream;
                 await video.play();
-
-                // Match the overlay container to the camera's actual dimensions.
-                const width = video.videoWidth || 1280;
-                const height = video.videoHeight || 720;
-                setVideoSize({ width, height });
 
                 if (cancelled) return;
 
@@ -431,7 +490,6 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
         if (!cameraReady || !modelReady) return;
 
         let stopped = false;
-        lastVideoTimeRef.current = -1;
 
         const processFrame = () => {
             if (stopped) return;
@@ -462,12 +520,11 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
                 canvas.height = height;
             }
 
-            // Do not clear the canvas between camera frames. Clearing on every
-            // requestAnimationFrame makes the skeleton flicker at camera FPS.
+            context.clearRect(0, 0, width, height);
+
             try {
                 if (video.currentTime !== lastVideoTimeRef.current) {
                     lastVideoTimeRef.current = video.currentTime;
-                    context.clearRect(0, 0, width, height);
 
                     const result = landmarker.detectForVideo(
                         video,
@@ -531,11 +588,16 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
                             let nextHold;
 
                             if (!nextPose.matched) {
-                                // Pause automatically on pose loss.
-                                // Resuming requires explicit user action.
+                                // Automatically pause when the pose is lost.
                                 nextHold = pauseHold();
                             } else {
                                 const hold = holdRef.current;
+                                const now = performance.now();
+                                // Automatically resume once the correct pose returns.
+                                if (!hold.completed && !hold.enabled) {
+                                    hold.enabled = true;
+                                    hold.intervalStart = now;
+                                }
 
                                 if (
                                     hold.enabled &&
@@ -646,24 +708,19 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
             )}
 
             <div className="grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1fr)_320px]">
-                <div
-                    className="relative w-full overflow-hidden bg-slate-950"
-                    style={{
-                        aspectRatio: `${videoSize.width} / ${videoSize.height}`,
-                    }}
-                >
+                <div className="relative min-h-64 bg-slate-950">
                     <video
                         ref={videoRef}
                         autoPlay
                         muted
                         playsInline
-                        className="absolute inset-0 h-full w-full object-fill"
+                        className="block h-full max-h-155 min-h-64 w-full object-contain"
                         style={{ transform: "scaleX(-1)" }}
                     />
 
                     <canvas
                         ref={canvasRef}
-                        className="pointer-events-none absolute inset-0 h-full w-full"
+                        className="pointer-events-none absolute inset-0 h-full w-full object-contain"
                         style={{ transform: "scaleX(-1)" }}
                     />
 
@@ -725,6 +782,7 @@ function StaticYogaPoseTracker({ exercise, onResult, disabled = false }) {
                             score: poseResult.score,
                             poseMatchScore: poseResult.score,
                             isPoseMatched: poseResult.matched,
+                            trackingReliable: isTrackingReliable(poseResult),
                             status: poseResult.status,
                             holdSeconds: holdState.elapsedSeconds,
                             targetHoldSeconds,

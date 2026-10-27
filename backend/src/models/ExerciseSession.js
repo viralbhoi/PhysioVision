@@ -77,6 +77,37 @@ const exerciseSessionSchema = new mongoose.Schema(
             default: [],
         },
 
+        // Static yoga session metrics. These remain unused for dynamic sessions.
+        targetHoldSeconds: {
+            type: Number,
+            min: 0,
+            default: 0,
+        },
+
+        holdDuration: {
+            type: Number,
+            min: 0,
+            default: 0,
+        },
+
+        poseMatchScore: {
+            type: Number,
+            min: 0,
+            max: 100,
+            default: 0,
+        },
+
+        holdCompleted: {
+            type: Boolean,
+            default: false,
+        },
+
+        validScoreFrames: {
+            type: Number,
+            min: 0,
+            default: 0,
+        },
+
         repetitions: {
             type: [repetitionSchema],
             default: [],

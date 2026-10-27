@@ -1,74 +1,49 @@
-import { useEffect, useMemo, useState } from "react";
-import StaticHoldTimer from "../engine/StaticHoldTimer";
-
-const formatTime = (seconds) => {
-    const value = Math.max(0, Math.floor(seconds));
-
-    const minutes = String(Math.floor(value / 60)).padStart(2, "0");
-
-    const remainder = String(value % 60).padStart(2, "0");
-
-    return `${minutes}:${remainder}`;
-};
+function formatTime(seconds) {
+    const value = Math.max(0, Math.floor(Number(seconds) || 0));
+    return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+}
 
 export default function StaticYogaHoldPanel({
     result,
     targetHoldSeconds = 30,
-    onStateChange,
 }) {
-    const timer = useMemo(
-        () => new StaticHoldTimer(targetHoldSeconds),
-        [targetHoldSeconds],
-    );
+    const score = Number.isFinite(result?.score) ? result.score : null;
+    const held = Math.max(0, Number(result?.holdSeconds ?? 0));
+    const target = Math.max(1, Number(targetHoldSeconds) || 30);
+    const reliable = Boolean(result?.trackingReliable);
+    const matched = Boolean(result?.isPoseMatched && reliable);
+    const enabled = Boolean(result?.enabled);
+    const completed = Boolean(result?.holdCompleted);
+    const progress = Math.min(100, (held / target) * 100);
 
-    const [snapshot, setSnapshot] = useState(() => timer.snapshot());
+    let status = "Align your pose";
+    let statusClass = "bg-amber-100 text-amber-800";
+    let detail =
+        "Move into the reference posture. The timer starts automatically once your pose is confirmed.";
 
-    const poseValid = Boolean(
-        result?.isPoseMatched && result?.trackingReliable,
-    );
-
-    useEffect(() => {
-        const next = timer.updatePoseValidity(poseValid, performance.now());
-
-        setSnapshot(next);
-        onStateChange?.(next);
-    }, [poseValid, timer, onStateChange]);
-
-    useEffect(() => {
-        const intervalId = window.setInterval(() => {
-            const next = timer.snapshot(performance.now());
-
-            setSnapshot(next);
-            onStateChange?.(next);
-        }, 200);
-
-        return () => window.clearInterval(intervalId);
-    }, [timer, onStateChange]);
-
-    const handleResume = () => {
-        const next = timer.resume(performance.now());
-
-        setSnapshot(next);
-        onStateChange?.(next);
-    };
-
-    const handlePause = () => {
-        const next = timer.pause(performance.now());
-
-        setSnapshot(next);
-        onStateChange?.(next);
-    };
-
-    const handleReset = () => {
-        const next = timer.reset(performance.now());
-
-        setSnapshot(next);
-        onStateChange?.(next);
-    };
-
-    const score = Number.isFinite(result?.score) ? result.score : 0;
-
-    const canResume = poseValid && !snapshot.completed && !snapshot.userEnabled;
+    if (completed) {
+        status = "Pose completed";
+        statusClass = "bg-emerald-100 text-emerald-700";
+        detail = "You reached the target hold duration.";
+    } else if (!reliable) {
+        status = "Tracking lost";
+        statusClass = "bg-rose-100 text-rose-700";
+        detail =
+            "Keep the required body joints visible. The timer will resume automatically when tracking recovers.";
+    } else if (enabled && matched) {
+        status = "Hold steady";
+        statusClass = "bg-emerald-100 text-emerald-700";
+        detail = "Your valid hold time is counting automatically.";
+    } else if (reliable && !matched) {
+        status = "Adjust your pose";
+        statusClass = "bg-amber-100 text-amber-800";
+        detail =
+            "Match the reference posture. Your accumulated valid hold time is preserved.";
+    } else if (matched) {
+        status = "Confirming pose";
+        statusClass = "bg-blue-100 text-blue-700";
+        detail = "Keep the pose steady; the timer will start automatically.";
+    }
 
     return (
         <section className="w-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -77,116 +52,56 @@ export default function StaticYogaHoldPanel({
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                         Static yoga pose
                     </p>
-
                     <h2 className="mt-1 text-xl font-semibold text-slate-900">
-                        Hold your posture
+                        Automatic hold timer
                     </h2>
                 </div>
-
                 <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        snapshot.completed
-                            ? "bg-emerald-100 text-emerald-700"
-                            : snapshot.isRunning
-                              ? "bg-blue-100 text-blue-700"
-                              : poseValid
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-slate-100 text-slate-600"
-                    }`}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}
                 >
-                    {snapshot.completed
-                        ? "Completed"
-                        : snapshot.isRunning
-                          ? "Holding"
-                          : poseValid
-                            ? "Ready"
-                            : "Timer paused"}
+                    {status}
                 </span>
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">Posture match</p>
-
+                    <p className="text-sm text-slate-500">Pose match</p>
                     <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">
-                        {score}%
+                        {score === null ? "—" : `${Math.round(score)}%`}
                     </p>
-
                     <p className="mt-1 text-xs text-slate-500">
                         Required: {result?.matchThreshold ?? 75}%
                     </p>
                 </div>
-
                 <div className="rounded-xl bg-slate-50 p-4">
                     <p className="text-sm text-slate-500">Valid hold time</p>
-
                     <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">
-                        {formatTime(snapshot.elapsedWholeSeconds)}
+                        {formatTime(held)}
                     </p>
-
                     <p className="mt-1 text-xs text-slate-500">
-                        Target: {formatTime(snapshot.targetSeconds)}
+                        Target: {formatTime(target)}
                     </p>
                 </div>
             </div>
 
-            <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+                className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100"
+                role="progressbar"
+                aria-label="Yoga hold progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress)}
+            >
                 <div
-                    className="h-full rounded-full bg-blue-600 transition-[width] duration-200"
-                    style={{
-                        width: `${snapshot.progress}%`,
-                    }}
+                    className={`h-full rounded-full transition-[width] duration-200 ${completed ? "bg-emerald-500" : "bg-emerald-500"}`}
+                    style={{ width: `${progress}%` }}
                 />
             </div>
 
-            <p
-                className={`mt-3 text-sm ${
-                    !result?.trackingReliable
-                        ? "text-amber-700"
-                        : poseValid
-                          ? "text-emerald-700"
-                          : "text-slate-600"
-                }`}
-            >
-                {!result?.trackingReliable
-                    ? "Tracking is unreliable. Make sure your body is visible."
-                    : poseValid
-                      ? "Pose is within the matching threshold."
-                      : "Pose match is below the threshold. The timer is paused and your accumulated time is preserved."}
-            </p>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-                <button
-                    type="button"
-                    onClick={handleResume}
-                    disabled={!canResume}
-                    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                    Resume timer
-                </button>
-
-                <button
-                    type="button"
-                    onClick={handlePause}
-                    disabled={!snapshot.userEnabled || snapshot.completed}
-                    className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    Pause
-                </button>
-
-                <button
-                    type="button"
-                    onClick={handleReset}
-                    className="rounded-xl border border-rose-200 px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
-                >
-                    Reset timer
-                </button>
-            </div>
-
-            {snapshot.completed && (
+            <p className="mt-3 text-sm leading-5 text-slate-600">{detail}</p>
+            {completed && (
                 <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
-                    Target hold duration reached. You can finish the session or
-                    reset the timer for another attempt.
+                    Hold completed. The timer has stopped automatically.
                 </div>
             )}
         </section>

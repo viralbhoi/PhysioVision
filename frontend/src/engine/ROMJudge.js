@@ -21,8 +21,11 @@ class ROMJudge {
         this.TOP_THRESHOLD = 0.45;
         this.HYSTERESIS = 0.1;
 
-        // A repetition needs at least 40% movement completion.
-        this.MIN_MOVEMENT_FOR_REP = 0.4;
+        // Ignore attempts below 30% of the reference movement.
+        this.MIN_MOVEMENT_FOR_REP = 0.3;
+
+        // Start tracking smaller partial movements too.
+        this.START_MOVEMENT_THRESHOLD = 0.08;
 
         this.MIN_TRAJECTORY_FRAMES = 3;
         this.MIN_VISIBLE_LANDMARKS = 8;
@@ -424,19 +427,21 @@ class ROMJudge {
     }
 
     completeRepetition() {
-        if (!this.validPeakReached) return null;
+        const movementCompletion = this.clamp(
+            (this.maxAchievedPct / this.TOP_THRESHOLD) * 100,
+            0,
+            100,
+        );
 
-        const movementCompletion = this.maxAchievedPct;
-        const enoughMovement = movementCompletion >= this.MIN_MOVEMENT_FOR_REP;
-
-        if (!enoughMovement) {
+        // Ignore attempts below 30%; don't count or score them.
+        if (movementCompletion < this.MIN_MOVEMENT_FOR_REP * 100) {
             this.rejectedAttempts.push({
                 reason: "INSUFFICIENT_MOVEMENT",
-                movementCompletion: this.round(movementCompletion * 100),
+                movementCompletion: this.round(movementCompletion),
             });
 
             this.lastFeedback =
-                "Insufficient movement for rep count. Complete the full movement.";
+                "Insufficient movement. Complete at least 30% of the movement.";
 
             this.currentTrajectory = [];
             return null;
@@ -451,48 +456,55 @@ class ROMJudge {
 
         const trajectoryScore = this.calculateTrajectoryScore();
 
-        // Trajectory similarity is the primary form score.
-        // Frame accuracy contributes only 5%.
-        let formScore = null;
+        // Preserve the existing trajectory-first similarity calculation.
+        let similarityScore = null;
 
         if (Number.isFinite(trajectoryScore)) {
-            formScore = Number.isFinite(frameAccuracy)
+            similarityScore = Number.isFinite(frameAccuracy)
                 ? 0.95 * trajectoryScore + 0.05 * frameAccuracy
                 : trajectoryScore;
+        } else if (Number.isFinite(frameAccuracy)) {
+            similarityScore = frameAccuracy;
         }
+
+        // Do not invent a score when similarity cannot be measured.
+        const finalScore = Number.isFinite(similarityScore)
+            ? this.round(movementCompletion * 0.6 + similarityScore * 0.4)
+            : null;
 
         this.reps++;
 
-        const repScore = formScore === null ? null : this.round(formScore);
+        this.repScores.push(finalScore);
 
-        this.repScores.push(repScore);
-
-        if (repScore !== null) {
-            this.lastRepScore = repScore;
+        if (finalScore !== null) {
+            this.lastRepScore = finalScore;
             this.scoredReps++;
-            this.totalScoreAccumulator += repScore;
+            this.totalScoreAccumulator += finalScore;
             this.averageScore = this.totalScoreAccumulator / this.scoredReps;
 
             this.lastFeedback = "Repetition completed.";
         } else {
             this.lastRepScore = null;
             this.lastFeedback =
-                "Repetition completed, but form score is unavailable. Calibrate a reference first.";
+                "Repetition counted, but similarity score is unavailable.";
         }
 
         this.completedAttempts.push({
             number: this.reps,
-            score: repScore,
-            movementCompletion: this.round(movementCompletion * 100),
-            formScore: repScore,
+            score: finalScore,
+            movementCompletion: this.round(movementCompletion),
+            similarityScore:
+                similarityScore === null ? null : this.round(similarityScore),
         });
 
         this.currentTrajectory = [];
 
         return {
             number: this.reps,
-            score: repScore,
-            movementCompletion: this.round(movementCompletion * 100),
+            score: finalScore,
+            movementCompletion: this.round(movementCompletion),
+            similarityScore:
+                similarityScore === null ? null : this.round(similarityScore),
         };
     }
 
@@ -605,8 +617,9 @@ class ROMJudge {
             const bouncedUp = pct > this.minAchievedPct + this.HYSTERESIS;
 
             if (returnedToStart) {
-                if (this.validPeakReached) {
+                if (returnedToStart) {
                     this.completeRepetition();
+                    this.resetCycle();
                 } else {
                     this.rejectedAttempts.push({
                         reason: "PEAK_NOT_REACHED",

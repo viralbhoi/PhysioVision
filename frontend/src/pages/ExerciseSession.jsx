@@ -113,10 +113,12 @@ function ExerciseSession({ assignment, onBack }) {
                 : Number(latestResult?.reps ?? 0);
 
             const averageScore = Number(
-                latestResult?.averageScore ??
-                    latestResult?.poseMatchScore ??
-                    latestResult?.score ??
-                    0,
+                isStaticYoga
+                    ? (latestResult?.averageScore ??
+                          latestResult?.poseMatchScore ??
+                          latestResult?.score ??
+                          0)
+                    : (latestResult?.averageScore ?? latestResult?.score ?? 0),
             );
 
             const repScores = Array.isArray(latestResult?.repScores)
@@ -144,11 +146,18 @@ function ExerciseSession({ assignment, onBack }) {
                 );
 
                 sessionPayload.poseMatchScore = Number(
-                    latestResult?.poseMatchScore ?? latestResult?.score ?? 0,
+                    latestResult?.averageScore ??
+                        latestResult?.poseMatchScore ??
+                        latestResult?.score ??
+                        0,
                 );
 
                 sessionPayload.holdCompleted = Boolean(
                     latestResult?.holdCompleted,
+                );
+
+                sessionPayload.validScoreFrames = Number(
+                    latestResult?.validScoreFrames ?? 0,
                 );
             }
 
