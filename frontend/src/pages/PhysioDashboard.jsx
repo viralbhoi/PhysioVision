@@ -32,6 +32,46 @@ const PhysioDashboard = () => {
     const [showAddPatient, setShowAddPatient] = useState(false);
 
     const [showYogaCreator, setShowYogaCreator] = useState(false);
+    const [patientSearch, setPatientSearch] = useState("");
+    const [patientFilter, setPatientFilter] = useState("all");
+    const [exerciseSearch, setExerciseSearch] = useState("");
+    const [exerciseFilter, setExerciseFilter] = useState("all");
+
+    const filteredPatients = patients.filter((patient) => {
+        const name = patient.user?.name || "";
+        const email = patient.user?.email || "";
+        const query = patientSearch.trim().toLowerCase();
+        const matchesSearch =
+            !query || `${name} ${email}`.toLowerCase().includes(query);
+        const matchesFilter =
+            patientFilter === "all" ||
+            (patientFilter === "selected" &&
+                selectedPatient?._id === patient._id) ||
+            (patientFilter === "unselected" &&
+                selectedPatient?._id !== patient._id);
+        return matchesSearch && matchesFilter;
+    });
+
+    const filteredExercises = exercises.filter((exercise) => {
+        const query = exerciseSearch.trim().toLowerCase();
+        const matchesSearch =
+            !query ||
+            `${exercise.name || ""} ${exercise.description || ""}`
+                .toLowerCase()
+                .includes(query);
+        const matchesFilter =
+            exerciseFilter === "all" ||
+            (exerciseFilter === "custom" && exercise.isCustom) ||
+            (exerciseFilter === "standard" && !exercise.isCustom);
+        return matchesSearch && matchesFilter;
+    });
+
+    const handleLogout = () => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("jwt");
+        window.location.href = "/login";
+    };
 
     const scrollToSection = (sectionId) => {
         document.getElementById(sectionId)?.scrollIntoView({
@@ -227,6 +267,13 @@ const PhysioDashboard = () => {
                             ↻ Refresh
                         </button>
 
+                        <button
+                            type="button"
+                            onClick={handleLogout}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                        >
+                            Log out
+                        </button>
                         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700">
                             P
                         </div>
@@ -471,6 +518,31 @@ const PhysioDashboard = () => {
                         </button>
                     </div>
 
+                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
+                        <input
+                            type="search"
+                            value={patientSearch}
+                            onChange={(event) =>
+                                setPatientSearch(event.target.value)
+                            }
+                            placeholder="Search patients by name or email..."
+                            aria-label="Search patients by name or email"
+                            className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                        />
+                        <select
+                            value={patientFilter}
+                            onChange={(event) =>
+                                setPatientFilter(event.target.value)
+                            }
+                            aria-label="Filter patients"
+                            className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                        >
+                            <option value="all">All patients</option>
+                            <option value="selected">Selected patient</option>
+                            <option value="unselected">Not selected</option>
+                        </select>
+                    </div>
+
                     {patients.length === 0 ? (
                         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
                             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
@@ -503,9 +575,13 @@ const PhysioDashboard = () => {
                                 Generate Connection Code
                             </button>
                         </div>
+                    ) : filteredPatients.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm text-slate-500">
+                            No patients match your search or filter.
+                        </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            {patients.map((patient) => {
+                            {filteredPatients.map((patient) => {
                                 const user = patient.user;
 
                                 const isSelected =
@@ -615,10 +691,24 @@ const PhysioDashboard = () => {
 
                             <button
                                 type="button"
-                                onClick={() => setShowYogaCreator(true)}
+                                onClick={() => {
+                                    setShowYogaCreator((visible) => !visible);
+                                    window.setTimeout(() => {
+                                        document
+                                            .getElementById(
+                                                "yoga-creator-panel",
+                                            )
+                                            ?.scrollIntoView({
+                                                behavior: "smooth",
+                                                block: "start",
+                                            });
+                                    }, 0);
+                                }}
                                 className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
                             >
-                                + Create Yoga Exercise
+                                {showYogaCreator
+                                    ? "− Hide Yoga Creator"
+                                    : "+ Create Yoga Exercise"}
                             </button>
 
                             <button
@@ -632,6 +722,30 @@ const PhysioDashboard = () => {
                                 + Generalized Sessions
                             </button>
                         </div>
+                    </div>
+
+                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
+                        <input
+                            type="search"
+                            value={exerciseSearch}
+                            onChange={(event) =>
+                                setExerciseSearch(event.target.value)
+                            }
+                            placeholder="Search exercises by name or description..."
+                            aria-label="Search exercises by name or description"
+                            className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                        />
+                        <select
+                            value={exerciseFilter}
+                            onChange={(event) =>
+                                setExerciseFilter(event.target.value)
+                            }
+                            aria-label="Filter exercises"
+                            className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                        >
+                            <option value="all">All exercises</option>
+                            <option value="custom">Custom exercises</option>
+                        </select>
                     </div>
 
                     {exercises.length === 0 ? (
@@ -666,9 +780,13 @@ const PhysioDashboard = () => {
                                 Create Exercise
                             </button>
                         </div>
+                    ) : filteredExercises.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm text-slate-500">
+                            No exercises match your search or filter.
+                        </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            {exercises.map((exercise) => {
+                            {filteredExercises.map((exercise) => {
                                 const isSelected =
                                     selectedExercise?._id === exercise._id;
 
@@ -743,6 +861,29 @@ const PhysioDashboard = () => {
                                     </button>
                                 );
                             })}
+                        </div>
+                    )}
+                    {showYogaCreator && (
+                        <div
+                            className="mt-6 scroll-mt-6"
+                            id="yoga-creator-panel"
+                        >
+                            <YogaExerciseCreator
+                                onCancel={() => setShowYogaCreator(false)}
+                                onCreated={(exercise) => {
+                                    if (exercise) {
+                                        setExercises((previous) => [
+                                            exercise,
+                                            ...previous.filter(
+                                                (item) =>
+                                                    item._id !== exercise._id,
+                                            ),
+                                        ]);
+                                        setSelectedExercise(exercise);
+                                    }
+                                    setShowYogaCreator(false);
+                                }}
+                            />
                         </div>
                     )}
                 </section>
@@ -892,24 +1033,6 @@ const PhysioDashboard = () => {
                     </div>
                 </section>
             </main>
-
-            {showYogaCreator && (
-                <YogaExerciseCreator
-                    onCancel={() => setShowYogaCreator(false)}
-                    onCreated={(exercise) => {
-                        if (exercise) {
-                            setExercises((previous) => [
-                                exercise,
-                                ...previous.filter(
-                                    (item) => item._id !== exercise._id,
-                                ),
-                            ]);
-                        }
-
-                        setShowYogaCreator(false);
-                    }}
-                />
-            )}
 
             {/* =================================================
                 Add Patient
