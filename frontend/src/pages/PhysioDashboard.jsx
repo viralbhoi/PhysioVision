@@ -225,9 +225,11 @@ const PhysioDashboard = () => {
                 <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
                     {/* Brand */}
                     <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-sm font-bold text-white shadow-sm">
-                            P
-                        </div>
+                        <img
+                            src="/pvv3.png"
+                            alt="PhysioVision logo"
+                            className="h-10 w-10 rounded-xl object-contain"
+                        />
 
                         <div>
                             <p className="text-sm font-semibold tracking-tight text-slate-900">

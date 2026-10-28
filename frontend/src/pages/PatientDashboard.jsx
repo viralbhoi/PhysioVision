@@ -10,12 +10,6 @@ import ExerciseSession from "./ExerciseSession";
 import SessionDetailReport from "../components/SessionDetailReport";
 import ConnectPhysio from "../components/ConnectPhysio";
 
-const FILTERS = {
-    ALL: "ALL",
-    ACTIVE: "ACTIVE",
-    COMPLETED: "COMPLETED",
-};
-
 const PatientDashboard = () => {
     const [assignments, setAssignments] = useState([]);
     const [physiotherapist, setPhysiotherapist] = useState(null);
@@ -23,8 +17,6 @@ const PatientDashboard = () => {
 
     const [selectedAssignment, setSelectedAssignment] = useState(null);
     const [selectedSession, setSelectedSession] = useState(null);
-    const [assignmentFilter, setAssignmentFilter] = useState(FILTERS.ALL);
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [historyError, setHistoryError] = useState("");
@@ -73,22 +65,13 @@ const PatientDashboard = () => {
         loadDashboard();
     }, [loadDashboard]);
 
+    // Keep the exercise list focused on work the patient can still do.
+    // Completed work is available in Session History below.
     const activeAssignments = assignments.filter(
         (assignment) =>
             assignment.status === "ASSIGNED" ||
             assignment.status === "IN_PROGRESS",
     );
-
-    const completedAssignments = assignments.filter(
-        (assignment) => assignment.status === "COMPLETED",
-    );
-
-    const visibleAssignments =
-        assignmentFilter === FILTERS.ACTIVE
-            ? activeAssignments
-            : assignmentFilter === FILTERS.COMPLETED
-              ? completedAssignments
-              : assignments;
 
     const handleConnected = async () => {
         await loadDashboard();
@@ -168,16 +151,19 @@ const PatientDashboard = () => {
             <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
                 <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
                     <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 font-bold text-white shadow-sm">
-                            P
-                        </div>
+                        <img
+                            src="/pvv3.png"
+                            alt="PhysioVision logo"
+                            className="h-10 w-10 rounded-xl object-contain"
+                        />
 
                         <div>
-                            <p className="font-semibold tracking-tight">
+                            <p className="text-sm font-semibold tracking-tight text-slate-900">
                                 PhysioVision
                             </p>
-                            <p className="text-[11px] text-slate-400">
-                                Patient Portal
+
+                            <p className="hidden text-[11px] text-slate-400 sm:block">
+                                Physiotherapist Portal
                             </p>
                         </div>
                     </div>
@@ -227,34 +213,41 @@ const PatientDashboard = () => {
                     </div>
                 </section>
 
-                {/* Functional overview cards */}
+                {/* Quick overview */}
                 <section className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <OverviewCard
-                        title="Assigned Exercises"
-                        value={assignments.length}
-                        description="View all prescribed exercises"
-                        icon="list"
-                        active={assignmentFilter === FILTERS.ALL}
-                        onClick={() => setAssignmentFilter(FILTERS.ALL)}
-                    />
-
-                    <OverviewCard
-                        title="Active"
-                        value={activeAssignments.length}
-                        description="Ready to continue"
-                        icon="activity"
-                        active={assignmentFilter === FILTERS.ACTIVE}
-                        onClick={() => setAssignmentFilter(FILTERS.ACTIVE)}
-                    />
-
-                    <OverviewCard
-                        title="Completed"
-                        value={completedAssignments.length}
-                        description="Review completed prescriptions"
-                        icon="check"
-                        active={assignmentFilter === FILTERS.COMPLETED}
-                        onClick={() => setAssignmentFilter(FILTERS.COMPLETED)}
-                    />
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <p className="text-sm font-medium text-slate-500">
+                            Active Exercises
+                        </p>
+                        <p className="mt-2 text-3xl font-bold tracking-tight">
+                            {activeAssignments.length}
+                        </p>
+                        <p className="mt-4 text-xs text-slate-400">
+                            Assigned or in progress
+                        </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <p className="text-sm font-medium text-slate-500">
+                            Past Sessions
+                        </p>
+                        <p className="mt-2 text-3xl font-bold tracking-tight">
+                            {sessions.length}
+                        </p>
+                        <p className="mt-4 text-xs text-slate-400">
+                            Available in Session History
+                        </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <p className="text-sm font-medium text-slate-500">
+                            Care Team
+                        </p>
+                        <p className="mt-2 text-3xl font-bold tracking-tight">
+                            {physiotherapist ? "Connected" : "Not connected"}
+                        </p>
+                        <p className="mt-4 text-xs text-slate-400">
+                            Your physiotherapist connection
+                        </p>
+                    </div>
                 </section>
 
                 {/* Physiotherapist */}
@@ -308,63 +301,23 @@ const PatientDashboard = () => {
 
                 {/* Exercises */}
                 <section className="mb-10">
-                    <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                    <div className="mb-5">
                         <SectionHeading
                             eyebrow="Rehabilitation"
-                            title="My Exercises"
-                            description="Select an exercise to begin or continue your prescribed routine."
+                            title="Active Exercises"
+                            description="Only assigned and in-progress exercises appear here. Completed activity is available in Session History."
                         />
-
-                        <div className="flex flex-wrap gap-2">
-                            {[
-                                { value: FILTERS.ALL, label: "All" },
-                                { value: FILTERS.ACTIVE, label: "Active" },
-                                {
-                                    value: FILTERS.COMPLETED,
-                                    label: "Completed",
-                                },
-                            ].map((filter) => (
-                                <button
-                                    key={filter.value}
-                                    type="button"
-                                    onClick={() =>
-                                        setAssignmentFilter(filter.value)
-                                    }
-                                    className={`rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
-                                        assignmentFilter === filter.value
-                                            ? "bg-blue-600 text-white"
-                                            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                                    }`}
-                                >
-                                    {filter.label}
-                                </button>
-                            ))}
-                        </div>
                     </div>
 
-                    {visibleAssignments.length === 0 ? (
+                    {activeAssignments.length === 0 ? (
                         <EmptyState
-                            title={
-                                assignmentFilter === FILTERS.COMPLETED
-                                    ? "No completed exercises"
-                                    : assignmentFilter === FILTERS.ACTIVE
-                                      ? "No active exercises"
-                                      : "No exercises assigned yet"
-                            }
-                            description={
-                                assignmentFilter === FILTERS.COMPLETED
-                                    ? "Completed prescriptions will appear here."
-                                    : assignmentFilter === FILTERS.ACTIVE
-                                      ? "You currently have no assigned or in-progress exercises."
-                                      : "Your prescribed exercises will appear here once your physiotherapist assigns them."
-                            }
+                            title="No active exercises"
+                            description="You currently have no assigned or in-progress exercises. Your previous activity remains available in Session History."
                         />
                     ) : (
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                            {visibleAssignments.map((assignment) => {
+                            {activeAssignments.map((assignment) => {
                                 const exercise = assignment.exercise;
-                                const completed =
-                                    assignment.status === "COMPLETED";
 
                                 return (
                                     <article
@@ -435,18 +388,12 @@ const PatientDashboard = () => {
                                                         assignment,
                                                     )
                                                 }
-                                                className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-4 ${
-                                                    completed
-                                                        ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-100"
-                                                        : "bg-slate-900 text-white hover:bg-blue-600 focus:ring-blue-100"
-                                                }`}
+                                                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-100"
                                             >
-                                                {completed
-                                                    ? "Open Exercise"
-                                                    : assignment.status ===
-                                                        "IN_PROGRESS"
-                                                      ? "Continue Exercise"
-                                                      : "Start Exercise"}
+                                                {assignment.status ===
+                                                "IN_PROGRESS"
+                                                    ? "Continue Exercise"
+                                                    : "Start Exercise"}
                                                 <span aria-hidden="true">
                                                     →
                                                 </span>
@@ -586,55 +533,6 @@ const PatientDashboard = () => {
         </div>
     );
 };
-
-function OverviewCard({ title, value, description, icon, active, onClick }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            aria-pressed={active}
-            className={`rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100 ${
-                active
-                    ? "border-blue-500 ring-2 ring-blue-100"
-                    : "border-slate-200 hover:border-slate-300"
-            }`}
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div>
-                    <p className="text-sm font-medium text-slate-500">
-                        {title}
-                    </p>
-                    <p className="mt-2 text-3xl font-bold tracking-tight">
-                        {value}
-                    </p>
-                </div>
-
-                <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-xl ${
-                        active
-                            ? "bg-blue-600 text-white"
-                            : "bg-blue-50 text-blue-600"
-                    }`}
-                >
-                    {icon === "list" ? (
-                        <ListIcon />
-                    ) : icon === "activity" ? (
-                        <ActivityIcon />
-                    ) : (
-                        <CheckIcon />
-                    )}
-                </div>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between gap-2">
-                <p className="text-xs text-slate-400">{description}</p>
-                <span className="text-sm font-semibold text-blue-600">
-                    View →
-                </span>
-            </div>
-        </button>
-    );
-}
 
 function SectionHeading({ eyebrow, title, description }) {
     return (
