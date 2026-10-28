@@ -197,23 +197,6 @@ const PhysioDashboard = () => {
     }
 
     // =========================================================
-    // Reference Video Calibration
-    // =========================================================
-
-    if (calibratingExercise) {
-        return (
-            <ReferenceVideoCalibrator
-                onCreated={(exercise) => {
-                    setExercises((previous) => [exercise, ...previous]);
-
-                    setCalibratingExercise(false);
-                }}
-                onCancel={() => setCalibratingExercise(false)}
-            />
-        );
-    }
-
-    // =========================================================
     // Patient Progress
     // =========================================================
 
@@ -691,19 +674,7 @@ const PhysioDashboard = () => {
 
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setShowYogaCreator((visible) => !visible);
-                                    window.setTimeout(() => {
-                                        document
-                                            .getElementById(
-                                                "yoga-creator-panel",
-                                            )
-                                            ?.scrollIntoView({
-                                                behavior: "smooth",
-                                                block: "start",
-                                            });
-                                    }, 0);
-                                }}
+                                onClick={() => setShowYogaCreator(true)}
                                 className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
                             >
                                 {showYogaCreator
@@ -863,29 +834,6 @@ const PhysioDashboard = () => {
                             })}
                         </div>
                     )}
-                    {showYogaCreator && (
-                        <div
-                            className="mt-6 scroll-mt-6"
-                            id="yoga-creator-panel"
-                        >
-                            <YogaExerciseCreator
-                                onCancel={() => setShowYogaCreator(false)}
-                                onCreated={(exercise) => {
-                                    if (exercise) {
-                                        setExercises((previous) => [
-                                            exercise,
-                                            ...previous.filter(
-                                                (item) =>
-                                                    item._id !== exercise._id,
-                                            ),
-                                        ]);
-                                        setSelectedExercise(exercise);
-                                    }
-                                    setShowYogaCreator(false);
-                                }}
-                            />
-                        </div>
-                    )}
                 </section>
 
                 {/* =================================================
@@ -1033,6 +981,93 @@ const PhysioDashboard = () => {
                     </div>
                 </section>
             </main>
+
+            {/* Shared modal styling for both exercise creators */}
+            {(calibratingExercise || showYogaCreator) && (
+                <div
+                    className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-[2px] sm:p-6"
+                    onMouseDown={(event) => {
+                        if (event.target === event.currentTarget) {
+                            if (calibratingExercise)
+                                setCalibratingExercise(false);
+                            if (showYogaCreator) setShowYogaCreator(false);
+                        }
+                    }}
+                >
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={
+                            calibratingExercise
+                                ? "Create exercise from reference video"
+                                : "Create yoga exercise"
+                        }
+                        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+                    >
+                        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">
+                                    Exercise Management
+                                </p>
+                                <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">
+                                    {calibratingExercise
+                                        ? "Create Exercise"
+                                        : "Create Yoga Exercise"}
+                                </h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setCalibratingExercise(false);
+                                    setShowYogaCreator(false);
+                                }}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-xl text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                                aria-label="Close creator"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+                            {calibratingExercise && (
+                                <ReferenceVideoCalibrator
+                                    onCreated={(exercise) => {
+                                        if (exercise) {
+                                            setExercises((previous) => [
+                                                exercise,
+                                                ...previous,
+                                            ]);
+                                            setSelectedExercise(exercise);
+                                        }
+                                        setCalibratingExercise(false);
+                                    }}
+                                    onCancel={() =>
+                                        setCalibratingExercise(false)
+                                    }
+                                />
+                            )}
+                            {showYogaCreator && (
+                                <YogaExerciseCreator
+                                    onCancel={() => setShowYogaCreator(false)}
+                                    onCreated={(exercise) => {
+                                        if (exercise) {
+                                            setExercises((previous) => [
+                                                exercise,
+                                                ...previous.filter(
+                                                    (item) =>
+                                                        item._id !==
+                                                        exercise._id,
+                                                ),
+                                            ]);
+                                            setSelectedExercise(exercise);
+                                        }
+                                        setShowYogaCreator(false);
+                                    }}
+                                />
+                            )}
+                        </div>
+                    </section>
+                </div>
+            )}
 
             {/* =================================================
                 Add Patient

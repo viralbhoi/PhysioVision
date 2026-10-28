@@ -230,8 +230,8 @@ export default function YogaExerciseCreator({ onCreated, onCancel }) {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6">
-            <div className="mx-auto max-w-4xl">
+        <div className="w-full">
+            <div className="mx-auto w-full max-w-4xl">
                 <header className="mb-6">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
                         PhysioVision · Exercise library
