@@ -401,6 +401,12 @@ function SessionDetailReport({ session, patient, onBack }) {
         if (typeof value === "object") return JSON.stringify(value, null, 2);
         return String(value);
     };
+    const formatDuration = (value) => {
+        const seconds = Math.max(0, Number(value) || 0);
+        const minutes = Math.floor(seconds / 60);
+        const remaining = Math.floor(seconds % 60);
+        return minutes ? `${minutes}m ${remaining}s` : `${remaining}s`;
+    };
     const fields = [
         ["Session ID", session._id],
         ["Status", session.status],
@@ -493,23 +499,78 @@ function SessionDetailReport({ session, patient, onBack }) {
                     </dl>
                 </section>
 
-                <ReportDataSection
-                    title="Repetition scores"
-                    data={session.repScores}
-                />
-                <ReportDataSection
-                    title="Repetition details"
-                    data={session.repetitions}
-                />
+                {/* Match the working patient-side repetition score cards. */}
+                <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-200 p-5 sm:p-6">
+                        <h2 className="text-lg font-semibold text-slate-900">
+                            Repetition scores
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">
+                            Individual scores recorded during this session.
+                        </p>
+                    </div>
+                    {Array.isArray(session.repScores) &&
+                    session.repScores.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4 lg:grid-cols-5 sm:p-6">
+                            {session.repScores.map((value, index) => (
+                                <div
+                                    key={index}
+                                    className="rounded-xl bg-slate-50 p-4"
+                                >
+                                    <p className="text-xs text-slate-400">
+                                        Rep {index + 1}
+                                    </p>
+                                    <p className="mt-1 text-xl font-bold text-slate-900">
+                                        {Math.round(Number(value) || 0)} / 100
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="p-5 text-sm text-slate-500">
+                            No individual repetition scores were recorded.
+                        </p>
+                    )}
+                </section>
 
-                <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                {Array.isArray(session.repetitions) &&
+                    session.repetitions.length > 0 && (
+                        <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                            <div className="border-b border-slate-200 p-5 sm:p-6">
+                                <h2 className="text-lg font-semibold text-slate-900">
+                                    Recorded repetition details
+                                </h2>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {session.repetitions.map((rep, index) => (
+                                    <div
+                                        key={rep?._id || index}
+                                        className="flex flex-wrap items-center justify-between gap-3 p-4"
+                                    >
+                                        <span className="font-medium text-slate-800">
+                                            Rep {rep?.number ?? index + 1}
+                                        </span>
+                                        <span className="text-sm text-slate-600">
+                                            Score: {rep?.score ?? 0}
+                                        </span>
+                                        <span className="text-sm text-slate-600">
+                                            Duration:{" "}
+                                            {formatDuration(rep?.duration)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                {/* <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <h2 className="mb-3 text-lg font-semibold text-slate-900">
                         Complete session record
                     </h2>
                     <pre className="max-h-96 overflow-auto rounded-xl bg-slate-950 p-4 text-xs leading-5 text-slate-100">
                         {JSON.stringify(session, null, 2)}
                     </pre>
-                </section>
+                </section> */}
             </div>
         </div>
     );
@@ -523,25 +584,6 @@ function ReportMetric({ label, value }) {
                 {value}
             </p>
         </div>
-    );
-}
-
-function ReportDataSection({ title, data }) {
-    return (
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="mb-3 text-lg font-semibold text-slate-900">
-                {title}
-            </h2>
-            {Array.isArray(data) && data.length ? (
-                <pre className="max-h-80 overflow-auto rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-700">
-                    {JSON.stringify(data, null, 2)}
-                </pre>
-            ) : (
-                <p className="text-sm text-slate-400">
-                    No {title.toLowerCase()} were returned for this session.
-                </p>
-            )}
-        </section>
     );
 }
 
