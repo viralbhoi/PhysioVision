@@ -7,7 +7,7 @@
 </h1>
 
 <p align="center">
-  <strong>Remote rehabilitation and exercise monitoring</strong><br />
+  <strong>Remote~ rehabilitation and exercise monitoring</strong><br />
   Move better. Live stronger.
 </p>
 
